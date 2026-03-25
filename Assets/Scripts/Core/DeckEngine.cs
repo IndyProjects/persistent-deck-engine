@@ -5,7 +5,7 @@ using System.Collections.Generic;
 /// No UI, no randomness, no game rules. Pure logic only.
 ///
 /// Card integer encoding:
-///   0–12  = Hearts   (0 = 2♥ ... 12 = A♥)
+///   0–12  = Hearts
 ///   13–25 = Diamonds
 ///   26–38 = Clubs
 ///   39–51 = Spades
@@ -13,7 +13,7 @@ public static class DeckEngine
 {
     public const int DeckSize = 52;
 
-    ///Returns a fresh ordered deck [0, 1, 2, ..., 51].
+    ///Returns a fresh ordered deck array 0-51].
     public static int[] CreateOrderedDeck()
     {
         int[] deck = new int[DeckSize];
@@ -149,8 +149,6 @@ public static class DeckEngine
     }
 
     /// Deals cards round-robin from the top of the deck (index 0).
-    /// Returns each player's hand and the remaining deck.
-    /// Does not mutate the input deck.
     public static (int[][] hands, int[] remainingDeck) DealCards(int[] deck, int players, int cardsEach)
     {
         if (!ValidateDeck(deck))
@@ -179,9 +177,6 @@ public static class DeckEngine
         return (hands, remainingDeck);
     }
 
-    /// Reassembles a deck from piles using an explicit collection order.
-    /// Example: piles = [[A],[B],[C]], order = [2,0,1] → [C,A,B]
-    /// All cards must appear exactly once across all piles.
     public static int[] CollectCards(int[][] piles, int[] order)
     {
         if (piles == null) throw new ArgumentNullException(nameof(piles));
@@ -205,9 +200,9 @@ public static class DeckEngine
         return deck;
     }
 
-    ///Returns the suit of a card (0=Hearts, 1=Diamonds, 2=Clubs, 3=Spades).</summary>
+    ///Returns the suit of a card (0=Hearts, 1=Diamonds, 2=Clubs, 3=Spades)
     public static int GetSuit(int card) => card / 13;
 
-    ///Returns the rank of a card (0=2, 1=3, ..., 11=King, 12=Ace).</summary>
+    ///Returns the rank of a card (0=2, 1=3, ..., 11=King, 12=Ace)
     public static int GetRank(int card) => card % 13;
 }
