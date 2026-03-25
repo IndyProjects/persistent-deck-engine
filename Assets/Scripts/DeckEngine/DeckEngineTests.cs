@@ -1,11 +1,9 @@
 using System;
 using UnityEngine;
 
-/// <summary>
 /// Lightweight in-editor test runner for Stage 1 DeckEngine.
 /// Attach to any GameObject and hit Play, or call RunAll() from the Unity console.
 /// Not a substitute for a proper test framework — purely for rapid validation.
-/// </summary>
 public class DeckEngineTests : MonoBehaviour
 {
     void Start() => RunAll();
@@ -91,8 +89,6 @@ public class DeckEngineTests : MonoBehaviour
         Assert("DealCards: original unmutated", ordered[0] == 0);
 
         // --- CollectCards ---
-        int[][] piles = { new int[]{0,1,2}, new int[]{3,4,5}, new int[]{6,7,8} };
-        // Build a full 52-card pile set for validation
         int[][] fullPiles = new int[4][];
         fullPiles[0] = new int[13]; fullPiles[1] = new int[13];
         fullPiles[2] = new int[13]; fullPiles[3] = new int[13];
@@ -101,6 +97,20 @@ public class DeckEngineTests : MonoBehaviour
         Assert("CollectCards: valid deck output", DeckEngine.ValidateDeck(collected));
         Assert("CollectCards: order respected — first card from pile 3", collected[0] == 39);
         Assert("CollectCards: order respected — last card from pile 0", collected[51] == 12);
+
+        // --- Invariant: no cards lost or duplicated across shuffles ---
+        int[] afterCut     = DeckEngine.CutDeck(ordered, 17);
+        int[] afterRiffle  = DeckEngine.RiffleShuffle(afterCut, 26, new int[]{2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3,2,3});
+        int[] afterOverhand = DeckEngine.OverhandShuffle(afterRiffle, new int[]{4,4,4,4,4,4,4,4,4,4,4,4,4});
+        Assert("Invariant: CutDeck preserves all 52 cards",      DeckEngine.ValidateDeck(afterCut));
+        Assert("Invariant: RiffleShuffle preserves all 52 cards", DeckEngine.ValidateDeck(afterRiffle));
+        Assert("Invariant: OverhandShuffle preserves all 52 cards", DeckEngine.ValidateDeck(afterOverhand));
+
+        // --- Round-trip: deal then collect restores a valid deck ---
+        var (rtHands, rtRemaining) = DeckEngine.DealCards(ordered, 4, 13);
+        Assert("Round-trip: 4 players × 13 cards leaves 0 remaining", rtRemaining.Length == 0);
+        int[] roundTrip = DeckEngine.CollectCards(rtHands, new int[]{0,1,2,3});
+        Assert("Round-trip: collect after full deal produces valid deck", DeckEngine.ValidateDeck(roundTrip));
 
         // --- Helper functions ---
         Assert("GetSuit: Hearts", DeckEngine.GetSuit(0) == 0);

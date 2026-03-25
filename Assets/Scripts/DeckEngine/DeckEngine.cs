@@ -1,17 +1,14 @@
 using System;
 using System.Collections.Generic;
 
-/// <summary>
-/// Stage 1 — Core Deck Engine
 /// Deterministic, input-driven physical simulation of a 52-card deck.
 /// No UI, no randomness, no game rules. Pure logic only.
 ///
-/// Card encoding:
+/// Card integer encoding:
 ///   0–12  = Hearts   (0 = 2♥ ... 12 = A♥)
 ///   13–25 = Diamonds
 ///   26–38 = Clubs
 ///   39–51 = Spades
-/// </summary>
 public static class DeckEngine
 {
     public const int DeckSize = 52;
@@ -185,7 +182,6 @@ public static class DeckEngine
     /// Reassembles a deck from piles using an explicit collection order.
     /// Example: piles = [[A],[B],[C]], order = [2,0,1] → [C,A,B]
     /// All cards must appear exactly once across all piles.
-    /// 
     public static int[] CollectCards(int[][] piles, int[] order)
     {
         if (piles == null) throw new ArgumentNullException(nameof(piles));
