@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem.EnhancedTouch;
 
@@ -6,20 +7,13 @@ using UnityEngine.InputSystem.EnhancedTouch;
 /// Stage 2 entry point. Wires all input readers, recognizers, session manager and parameter generators. Holds the persistent deck state and dispatches to DeckEngine on each completed, valid gesture session.
 public class InputCoordinator : MonoBehaviour
 {
-    // State
-
     public int[]   CurrentDeck  { get; private set; }
     public int[][] CurrentHands { get; private set; } = Array.Empty<int[]>();
 
     /// Raised after any DeckEngine operation updates the deck.
     public event Action<int[]> DeckChanged;
 
-    // Pipeline pieces
-
-    private MouseInputReader    _mouse;
-    private TouchInputReader    _touch;
-    private KeyboardInputReader _keyboard;
-    private GamepadInputReader  _gamepad;
+    private List<IInputReader> _readers;
 
     private GestureRecognizerDispatcher _dispatcher;
     private GestureSessionManager       _sessionManager;
@@ -30,8 +24,6 @@ public class InputCoordinator : MonoBehaviour
     private DealParamGenerator     _dealGen;
     private CollectParamGenerator  _collectGen;
 
-    // Unity lifecycle
-
     private void Awake()
     {
         EnhancedTouchSupport.Enable();
@@ -41,38 +33,25 @@ public class InputCoordinator : MonoBehaviour
 
     private void Update()
     {
-        _mouse.Poll();
-        _touch.Poll();
-        _keyboard.Poll();
-        _gamepad.Poll();
+        foreach (var r in _readers) r.Poll();
     }
 
     private void OnDestroy()
     {
-        _mouse.Disable();
-        _touch.Disable();
-        _keyboard.Disable();
-        _gamepad.Disable();
+        foreach (var r in _readers) r.Disable();
         EnhancedTouchSupport.Disable();
     }
 
-    //construction
-
-
     private void BuildPipeline()
     {
-        // Readers
-        _mouse    = new MouseInputReader();
-        _touch    = new TouchInputReader();
-        _keyboard = new KeyboardInputReader();
-        _gamepad  = new GamepadInputReader();
+        _readers = new List<IInputReader>
+        {
+            new MouseInputReader(),
+            new TouchInputReader(),
+            new KeyboardInputReader(),
+            new GamepadInputReader()
+        };
 
-        _mouse.Enable();
-        _touch.Enable();
-        _keyboard.Enable();
-        _gamepad.Enable();
-
-        // Recognizers
         _dispatcher = new GestureRecognizerDispatcher();
         _dispatcher.Register(new CutRecognizer());
         _dispatcher.Register(new RiffleRecognizer());
@@ -80,25 +59,18 @@ public class InputCoordinator : MonoBehaviour
         _dispatcher.Register(new DealRecognizer());
         _dispatcher.Register(new CollectRecognizer());
 
-        _dispatcher.Subscribe(_mouse);
-        _dispatcher.Subscribe(_touch);
-        _dispatcher.Subscribe(_keyboard);
-        _dispatcher.Subscribe(_gamepad);
+        foreach (var r in _readers) { r.Enable(); _dispatcher.Subscribe(r); }
 
-        // Session manager
         _sessionManager = new GestureSessionManager();
         _dispatcher.GestureRecognized += _sessionManager.OnGestureEvent;
         _sessionManager.SessionEnded  += OnSessionEnded;
 
-        // Generators
         _cutGen      = new CutParamGenerator();
         _riffleGen   = new RiffleParamGenerator();
         _overhandGen = new OverhandParamGenerator();
         _dealGen     = new DealParamGenerator();
         _collectGen  = new CollectParamGenerator();
     }
-
-    // Session dispatch
 
     private void OnSessionEnded(IGestureSession session)
     {
@@ -121,7 +93,7 @@ public class InputCoordinator : MonoBehaviour
                 break;
             }
 
-            case GestureType.RiffleStart when session is RiffleSession rs:
+            case GestureType.RiffleStart:
             {
                 var result = _riffleGen.Generate(session.Events);
                 Apply(result, p =>
@@ -159,10 +131,8 @@ public class InputCoordinator : MonoBehaviour
 
             case GestureType.CollectPile when session is CollectSession cs:
             {
-                // Build deck: hands + remaining deck 
                 int[][] piles = BuildPiles();
-                _collectGen.CurrentPiles = piles;
-                var result = _collectGen.GenerateFromSession(cs);
+                var result = _collectGen.GenerateFromSession(cs, piles);
                 Apply(result, p =>
                 {
                     CurrentDeck  = DeckEngine.CollectCards(p.Piles, p.Order);
@@ -195,8 +165,6 @@ public class InputCoordinator : MonoBehaviour
         DeckChanged?.Invoke(CurrentDeck);
     }
 
-
-    /// Assembles piles from CurrentHands + remaining CurrentDeck for CollectCards.
     private int[][] BuildPiles()
     {
         int handCount = CurrentHands.Length;

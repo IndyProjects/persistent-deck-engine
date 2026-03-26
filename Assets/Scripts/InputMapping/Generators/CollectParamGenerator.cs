@@ -2,31 +2,26 @@ using System.Collections.Generic;
 
 public class CollectParamGenerator : IParameterGenerator<CollectParams>
 {
-    // Piles are injected by the coordinator before Generate is called.
-    public int[][] CurrentPiles { get; set; }
-
     public ParameterResult<CollectParams> Generate(List<GestureEvent> events)
-    {
-        return ParameterResult<CollectParams>.Rejected("Use GenerateFromSession for collect.");
-    }
+        => ParameterResult<CollectParams>.Rejected("Use GenerateFromSession for collect.");
 
-    public ParameterResult<CollectParams> GenerateFromSession(CollectSession session)
+    public ParameterResult<CollectParams> GenerateFromSession(CollectSession session, int[][] piles)
     {
         if (session == null)
             return ParameterResult<CollectParams>.Rejected("Null CollectSession.");
         if (session.IsCancelled)
             return ParameterResult<CollectParams>.Rejected("CollectSession was cancelled.");
-        if (CurrentPiles == null)
-            return ParameterResult<CollectParams>.Rejected("CurrentPiles not set on CollectParamGenerator.");
+        if (piles == null)
+            return ParameterResult<CollectParams>.Rejected("Piles not provided.");
 
         var order = session.PileOrder;
-        if (order.Count != CurrentPiles.Length)
+        if (order.Count != piles.Length)
             return ParameterResult<CollectParams>.Rejected(
-                $"Order length {order.Count} != pile count {CurrentPiles.Length}.");
+                $"Order length {order.Count} != pile count {piles.Length}.");
 
         return ParameterResult<CollectParams>.Valid(new CollectParams
         {
-            Piles = CurrentPiles,
+            Piles = piles,
             Order = order.ToArray()
         });
     }

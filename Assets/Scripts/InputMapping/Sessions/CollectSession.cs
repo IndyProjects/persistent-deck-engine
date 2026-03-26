@@ -13,8 +13,8 @@ public class CollectSession : GestureSession
 
     public override void AddEvent(GestureEvent e)
     {
+        base.AddEvent(e);
         if (IsComplete || IsCancelled) return;
-        Events.Add(e);
 
         if (e.Type == GestureType.CollectPile && e.Payload is CollectPilePayload tap)
         {

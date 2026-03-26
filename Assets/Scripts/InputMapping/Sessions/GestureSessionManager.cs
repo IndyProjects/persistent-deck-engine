@@ -5,13 +5,11 @@ using UnityEngine;
 /// Manages active gesture sessions and routes completed sessions to the coordinator.
 public class GestureSessionManager
 {
-    /// Raised when a session completes (or is cancelled).
     public event Action<IGestureSession> SessionEnded;
 
     private readonly Dictionary<GestureType, IGestureSession> _active
         = new Dictionary<GestureType, IGestureSession>();
 
-    // How many piles are currently in play set by the coordinator before collect gestures start.
     public int ActivePileCount { get; set; } = 1;
 
     public void OnGestureEvent(GestureEvent e)
@@ -19,13 +17,8 @@ public class GestureSessionManager
         switch (e.Type)
         {
             case GestureType.Cut:
-            {
-                // session open and immediately close.
-                var session = new GestureSession(GestureType.Cut);
-                session.AddEvent(e);
-                SessionEnded?.Invoke(session);
+                FireOneShot(GestureType.Cut, e);
                 break;
-            }
 
             case GestureType.RiffleStart:
             {
@@ -41,16 +34,10 @@ public class GestureSessionManager
                 if (_active.TryGetValue(GestureType.RiffleStart, out var s) && s is RiffleSession rs)
                 {
                     rs.AddEvent(e);
-                    if (rs.IsComplete || rs.IsCancelled)
-                    {
-                        _active.Remove(GestureType.RiffleStart);
-                        SessionEnded?.Invoke(rs);
-                    }
+                    TryCloseSession(GestureType.RiffleStart, rs);
                 }
                 else
-                {
                     Debug.LogWarning("[GestureSessionManager] RiffleDrop received without active RiffleSession.");
-                }
                 break;
             }
 
@@ -67,40 +54,22 @@ public class GestureSessionManager
                 if (_active.TryGetValue(GestureType.OverhandGrab, out var s) && s is OverhandSession os)
                 {
                     os.AddEvent(e);
-                    if (os.IsComplete || os.IsCancelled)
-                    {
-                        _active.Remove(GestureType.OverhandGrab);
-                        SessionEnded?.Invoke(os);
-                    }
+                    TryCloseSession(GestureType.OverhandGrab, os);
                 }
                 break;
             }
 
             case GestureType.DealStart:
-            {
-                var session = new GestureSession(GestureType.DealStart);
-                session.AddEvent(e);
-                SessionEnded?.Invoke(session);
+                FireOneShot(GestureType.DealStart, e);
                 break;
-            }
-
-            case GestureType.DealStroke:
-            {
-                // Decorative — logged but does not trigger a session end.
-                break;
-            }
 
             case GestureType.CollectPile:
             {
                 if (!_active.ContainsKey(GestureType.CollectPile))
                     _active[GestureType.CollectPile] = new CollectSession(ActivePileCount);
-                _active[GestureType.CollectPile].AddEvent(e);
-                var cs = _active[GestureType.CollectPile];
-                if (cs.IsComplete || cs.IsCancelled)
-                {
-                    _active.Remove(GestureType.CollectPile);
-                    SessionEnded?.Invoke(cs);
-                }
+                var cs = (CollectSession)_active[GestureType.CollectPile];
+                cs.AddEvent(e);
+                TryCloseSession(GestureType.CollectPile, cs);
                 break;
             }
         }
@@ -117,11 +86,23 @@ public class GestureSessionManager
         if (s is OverhandSession os)
         {
             os.AddFixedChunk(size);
-            if (os.IsComplete || os.IsCancelled)
-            {
-                _active.Remove(GestureType.OverhandGrab);
-                SessionEnded?.Invoke(os);
-            }
+            TryCloseSession(GestureType.OverhandGrab, os);
+        }
+    }
+
+    private void FireOneShot(GestureType type, GestureEvent e)
+    {
+        var session = new GestureSession(type);
+        session.AddEvent(e);
+        SessionEnded?.Invoke(session);
+    }
+
+    private void TryCloseSession(GestureType key, IGestureSession session)
+    {
+        if (session.IsComplete || session.IsCancelled)
+        {
+            _active.Remove(key);
+            SessionEnded?.Invoke(session);
         }
     }
 
