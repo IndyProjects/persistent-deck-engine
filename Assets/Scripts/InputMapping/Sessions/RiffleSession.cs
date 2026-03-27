@@ -13,8 +13,8 @@ public class RiffleSession : GestureSession
 
     public override void AddEvent(GestureEvent e)
     {
+        base.AddEvent(e);
         if (IsComplete || IsCancelled) return;
-        Events.Add(e);
 
         if (e.Type == GestureType.RiffleStart && e.Payload is RiffleStartPayload start)
         {

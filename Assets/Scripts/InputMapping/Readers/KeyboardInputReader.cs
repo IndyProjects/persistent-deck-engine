@@ -61,10 +61,16 @@ public class KeyboardInputReader : IInputReader
 
     private void PollCutMode(Keyboard kb, double t)
     {
-        if (kb.leftBracketKey.wasPressedThisFrame)  _cutPoint = Mathf.Max(1, _cutPoint - InputConstants.GamepadCutStep);
-        if (kb.rightBracketKey.wasPressedThisFrame) _cutPoint = Mathf.Min(51, _cutPoint + InputConstants.GamepadCutStep);
-
-        EmitAxis("CutPosition", _cutPoint / 51f, t);
+        if (kb.leftBracketKey.wasPressedThisFrame)
+        {
+            _cutPoint = Mathf.Max(1, _cutPoint - InputConstants.GamepadCutStep);
+            EmitAxis("CutPosition", _cutPoint / 51f, t);
+        }
+        if (kb.rightBracketKey.wasPressedThisFrame)
+        {
+            _cutPoint = Mathf.Min(51, _cutPoint + InputConstants.GamepadCutStep);
+            EmitAxis("CutPosition", _cutPoint / 51f, t);
+        }
 
         if (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame)
         {

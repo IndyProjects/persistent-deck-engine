@@ -9,14 +9,7 @@ public class CollectRecognizer : IGestureRecognizer
 
     private int _nextGamepadPile = 0;
 
-    public void OnPointerEvent(RawPointerEvent e)
-    {
-        // Short tap = collect next pile.
-        if (e.Phase == GesturePhase.Ended)
-        {
-            EmitCollect(0, e.Source, e.Timestamp);
-        }
-    }
+    public void OnPointerEvent(RawPointerEvent e) { }
 
     public void OnAxisEvent(RawAxisEvent e)
     {

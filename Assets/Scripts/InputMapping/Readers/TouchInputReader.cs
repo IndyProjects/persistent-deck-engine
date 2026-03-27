@@ -21,6 +21,7 @@ public class TouchInputReader : IInputReader
     public void Poll()
     {
         if (!_enabled) return;
+        if (!EnhancedTouchSupport.enabled) return;
 
         foreach (var touch in Touch.activeTouches)
         {

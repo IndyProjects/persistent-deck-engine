@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-public class OverhandParamGenerator : IParameterGenerator<OverhandParams>
+public class OverhandParamGenerator
 {
     public ParameterResult<OverhandParams> Generate(List<GestureEvent> events)
     {

@@ -12,8 +12,8 @@ public class OverhandSession : GestureSession
 
     public override void AddEvent(GestureEvent e)
     {
+        base.AddEvent(e);
         if (IsComplete || IsCancelled) return;
-        Events.Add(e);
 
         if (e.Type == GestureType.OverhandGrab && e.Payload is OverhandGrabPayload grab)
         {

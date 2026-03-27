@@ -1,20 +1,16 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem.EnhancedTouch;
 
 /// Stage 2 entry point. Translates completed gesture sessions into GameOperations
-/// and applies them via GameStateManager. Set StateManager before gestures fire.
+/// and applies them via GameStateManager and Set StateManager before gestures
 public class InputCoordinator : MonoBehaviour
 {
-    /// Injected by GameStateManagerBridge in Awake before any Update runs.
+    /// Injected by GameStateManagerBridge at runtime. Must be set for gestures to have any effect.
     public GameStateManager StateManager { get; set; }
 
-    // Pipeline pieces
-
-    private MouseInputReader    _mouse;
-    private TouchInputReader    _touch;
-    private KeyboardInputReader _keyboard;
-    private GamepadInputReader  _gamepad;
+    private List<IInputReader> _readers;
 
     private GestureRecognizerDispatcher _dispatcher;
     private GestureSessionManager       _sessionManager;
@@ -25,8 +21,6 @@ public class InputCoordinator : MonoBehaviour
     private DealParamGenerator     _dealGen;
     private CollectParamGenerator  _collectGen;
 
-    // Unity lifecycle
-
     private void Awake()
     {
         EnhancedTouchSupport.Enable();
@@ -35,32 +29,24 @@ public class InputCoordinator : MonoBehaviour
 
     private void Update()
     {
-        _mouse.Poll();
-        _touch.Poll();
-        _keyboard.Poll();
-        _gamepad.Poll();
+        foreach (var r in _readers) r.Poll();
     }
 
     private void OnDestroy()
     {
-        _mouse.Disable();
-        _touch.Disable();
-        _keyboard.Disable();
-        _gamepad.Disable();
+        foreach (var r in _readers) r.Disable();
         EnhancedTouchSupport.Disable();
     }
 
     private void BuildPipeline()
     {
-        _mouse    = new MouseInputReader();
-        _touch    = new TouchInputReader();
-        _keyboard = new KeyboardInputReader();
-        _gamepad  = new GamepadInputReader();
-
-        _mouse.Enable();
-        _touch.Enable();
-        _keyboard.Enable();
-        _gamepad.Enable();
+        _readers = new List<IInputReader>
+        {
+            new MouseInputReader(),
+            new TouchInputReader(),
+            new KeyboardInputReader(),
+            new GamepadInputReader()
+        };
 
         _dispatcher = new GestureRecognizerDispatcher();
         _dispatcher.Register(new CutRecognizer());
@@ -69,10 +55,7 @@ public class InputCoordinator : MonoBehaviour
         _dispatcher.Register(new DealRecognizer());
         _dispatcher.Register(new CollectRecognizer());
 
-        _dispatcher.Subscribe(_mouse);
-        _dispatcher.Subscribe(_touch);
-        _dispatcher.Subscribe(_keyboard);
-        _dispatcher.Subscribe(_gamepad);
+        foreach (var r in _readers) { r.Enable(); _dispatcher.Subscribe(r); }
 
         _sessionManager = new GestureSessionManager();
         _dispatcher.GestureRecognized += _sessionManager.OnGestureEvent;
@@ -110,7 +93,7 @@ public class InputCoordinator : MonoBehaviour
                 break;
             }
 
-            case GestureType.RiffleStart when session is RiffleSession rs:
+            case GestureType.RiffleStart:
             {
                 var r = _riffleGen.Generate(session.Events);
                 if (Rejected(r)) return;
@@ -141,8 +124,7 @@ public class InputCoordinator : MonoBehaviour
             case GestureType.CollectPile when session is CollectSession cs:
             {
                 int[][] piles = BuildPiles();
-                _collectGen.CurrentPiles = piles;
-                var r = _collectGen.GenerateFromSession(cs);
+                var r = _collectGen.GenerateFromSession(cs, piles);
                 if (Rejected(r)) return;
                 var op = StateManager.Apply(new CollectOperation(r.Params.Piles, r.Params.Order));
                 if (op.Success)

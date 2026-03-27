@@ -92,7 +92,7 @@ public class InputMappingTests : MonoBehaviour
 
 
         var collectGen = new CollectParamGenerator();
-        collectGen.CurrentPiles = new int[][] {
+        var testPiles = new int[][] {
             new int[]{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 },
             new int[]{ 13,14,15,16,17,18,19,20,21,22,23,24,25 },
             new int[]{ 26,27,28,29,30,31,32,33,34,35,36,37,38 },
@@ -105,7 +105,7 @@ public class InputMappingTests : MonoBehaviour
         cs.AddEvent(CollectPile(1));
         cs.AddEvent(CollectPile(0));
         Assert("Collect: session completes at 4 piles", cs.IsComplete);
-        var collectResult = collectGen.GenerateFromSession(cs);
+        var collectResult = collectGen.GenerateFromSession(cs, testPiles);
         Assert("Collect: Valid", collectResult.Status == ParameterStatus.Valid);
         Assert("Collect: Order=[3,2,1,0]", collectResult.Params.Order[0] == 3 && collectResult.Params.Order[3] == 0);
 

@@ -8,4 +8,5 @@ public interface IInputReader
 
     void Enable();
     void Disable();
+    void Poll();
 }
