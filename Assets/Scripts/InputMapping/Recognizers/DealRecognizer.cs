@@ -5,6 +5,7 @@ using UnityEngine;
 public class DealRecognizer : IGestureRecognizer
 {
     public GestureType Handles => GestureType.DealStart;
+    public bool CapturesPointer => false;
     public event Action<GestureEvent> GestureRecognized;
 
     private int _pendingPlayers = -1;

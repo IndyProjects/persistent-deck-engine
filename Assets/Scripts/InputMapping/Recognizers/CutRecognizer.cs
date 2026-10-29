@@ -5,6 +5,7 @@ using UnityEngine;
 public class CutRecognizer : IGestureRecognizer
 {
     public GestureType Handles => GestureType.Cut;
+    public bool CapturesPointer => false;
     public event Action<GestureEvent> GestureRecognized;
 
     private Vector2 _dragStart;
@@ -24,9 +25,14 @@ public class CutRecognizer : IGestureRecognizer
         }
         else if (e.Phase == GesturePhase.Ended && _dragging)
         {
+            _dragging = false;
+
+            // Horizontal drags only — vertical drags belong to OverhandRecognizer
+            Vector2 d = e.Position - _dragStart;
+            if (Mathf.Abs(d.x) < Mathf.Abs(d.y)) return;
+
             float norm = Mathf.Clamp01(e.Position.x / Screen.width);
             Emit(norm, e.Source, e.Timestamp);
-            _dragging = false;
         }
     }
 

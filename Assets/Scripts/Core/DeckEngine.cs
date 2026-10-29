@@ -60,6 +60,11 @@ public static class DeckEngine
         return result;
     }
 
+    /// Input-driven riffle shuffle, modelled on a physical riffle.
+    /// The deck is split into a left packet (top <paramref name="splitIndex"/> cards) and a right packet (the rest).
+    /// Cards fall from the BOTTOM of each packet, alternating left/right per <paramref name="dropPattern"/>,
+    /// so the first cards dropped end up at the bottom of the new deck. Once the pattern runs out,
+    /// drops continue one card at a time.
     public static int[] RiffleShuffle(int[] deck, int splitIndex, int[] dropPattern)
     {
         if (!ValidateDeck(deck))
@@ -69,41 +74,39 @@ public static class DeckEngine
         if (dropPattern == null || dropPattern.Length == 0)
             throw new ArgumentException("dropPattern must not be empty.", nameof(dropPattern));
 
-        // Split into two halves
-        int leftLength = splitIndex;
-        int rightLength = DeckSize - splitIndex;
-        int leftPos = 0;
-        int rightPos = 0;
+        // Bottom card of each packet (index 0 = top of deck)
+        int leftBottom  = splitIndex - 1;
+        int rightBottom = DeckSize - 1;
 
-        List<int> result = new List<int>(DeckSize);
+        // Filled from the end backwards: the first card dropped lands at the bottom (index 51)
+        int[] result = new int[DeckSize];
+        int resultPos = DeckSize - 1;
 
         bool takingFromLeft = true;
         int patternIndex = 0;
 
-        while (leftPos < leftLength || rightPos < rightLength)
+        while (leftBottom >= 0 || rightBottom >= splitIndex)
         {
             int take = patternIndex < dropPattern.Length ? dropPattern[patternIndex] : 1;
             patternIndex++;
 
             if (takingFromLeft)
             {
-                int available = leftLength - leftPos;
-                int actual = Math.Min(take, available);
+                int actual = Math.Min(take, leftBottom + 1);
                 for (int i = 0; i < actual; i++)
-                    result.Add(deck[leftPos++]);
+                    result[resultPos--] = deck[leftBottom--];
             }
             else
             {
-                int available = rightLength - rightPos;
-                int actual = Math.Min(take, available);
+                int actual = Math.Min(take, rightBottom - splitIndex + 1);
                 for (int i = 0; i < actual; i++)
-                    result.Add(deck[splitIndex + rightPos++]);
+                    result[resultPos--] = deck[rightBottom--];
             }
 
             takingFromLeft = !takingFromLeft;
         }
 
-        return result.ToArray();
+        return result;
     }
 
     /// Input-driven overhand shuffle.

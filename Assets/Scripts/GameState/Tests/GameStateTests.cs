@@ -60,6 +60,7 @@ public class GameStateTests : MonoBehaviour
         Assert("Deal: Each hand has 5 cards",     mgr.CurrentHands[0].Length == 5);
         Assert("Deal: Remaining deck = 32",       mgr.CurrentDeck.Length == 32);
         Assert("Deal: RoundNumber unchanged",     mgr.RoundNumber == 0);
+        Assert("Deal: All 52 cards accounted for", mgr.AllCardsAccountedFor());
 
 
         // --- Shuffle blocked while InPlay ---

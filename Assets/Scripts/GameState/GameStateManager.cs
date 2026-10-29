@@ -38,8 +38,8 @@ public class GameStateManager
         Execute(op);
 
 #if UNITY_EDITOR
-        if (!DeckEngine.ValidateDeck(CurrentDeck))
-            Debug.LogError($"[GameState] INVARIANT VIOLATED after {op.GetType().Name}: deck is invalid!");
+        if (!AllCardsAccountedFor())
+            Debug.LogError($"[GameState] INVARIANT VIOLATED after {op.GetType().Name}: cards lost or duplicated!");
 #endif
 
         StateChanged?.Invoke(TakeSnapshot());
@@ -133,6 +133,16 @@ public class GameStateManager
                 RoundNumber++;
                 break;
         }
+    }
+
+    /// True if the deck plus all hands together hold each of the 52 cards exactly once.
+    public bool AllCardsAccountedFor()
+    {
+        var all = new List<int>(DeckEngine.DeckSize);
+        if (CurrentDeck != null) all.AddRange(CurrentDeck);
+        foreach (int[] hand in CurrentHands)
+            if (hand != null) all.AddRange(hand);
+        return DeckEngine.ValidateDeck(all.ToArray());
     }
 
     private void PushHistory()

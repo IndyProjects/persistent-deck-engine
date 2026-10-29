@@ -7,47 +7,51 @@ using UnityEngine;
 public class OverhandRecognizer : IGestureRecognizer
 {
     public GestureType Handles => GestureType.OverhandGrab;
+    public bool CapturesPointer => false;
     public event Action<GestureEvent> GestureRecognized;
 
-    private bool  _grabActive;
-    private float _grabNorm;
+    private bool    _dragging;
     private Vector2 _dragStart;
+    private double  _dragStartTime;
 
+    /// Grab + release are emitted together at drag end, once the drag is known to be vertical
+    /// (horizontal drags belong to CutRecognizer).
     public void OnPointerEvent(RawPointerEvent e)
     {
         if (e.Phase == GesturePhase.Began)
         {
-            _dragStart  = e.Position;
-            _grabActive = false;
+            _dragStart     = e.Position;
+            _dragStartTime = e.Timestamp;
+            _dragging      = false;
         }
         else if (e.Phase == GesturePhase.Updated)
         {
-            if (!_grabActive && Vector2.Distance(e.Position, _dragStart) >= InputConstants.DragMinPixels)
-            {
-                _grabActive = true;
-                _grabNorm   = Mathf.Clamp01(e.Position.y / Screen.height);
-                GestureRecognized?.Invoke(new GestureEvent
-                {
-                    Type      = GestureType.OverhandGrab,
-                    Source    = e.Source,
-                    Phase     = GesturePhase.Began,
-                    Timestamp = e.Timestamp,
-                    Payload   = new OverhandGrabPayload { NormalizedDepth = _grabNorm }
-                });
-            }
+            if (!_dragging && Vector2.Distance(e.Position, _dragStart) >= InputConstants.DragMinPixels)
+                _dragging = true;
         }
-        else if (e.Phase == GesturePhase.Ended && _grabActive)
+        else if (e.Phase == GesturePhase.Ended && _dragging)
         {
-            float releaseNorm = Mathf.Clamp01(e.Position.y / Screen.height);
+            _dragging = false;
+
+            Vector2 d = e.Position - _dragStart;
+            if (Mathf.Abs(d.y) <= Mathf.Abs(d.x)) return;
+
+            GestureRecognized?.Invoke(new GestureEvent
+            {
+                Type      = GestureType.OverhandGrab,
+                Source    = e.Source,
+                Phase     = GesturePhase.Began,
+                Timestamp = _dragStartTime,
+                Payload   = new OverhandGrabPayload { NormalizedDepth = Mathf.Clamp01(_dragStart.y / Screen.height) }
+            });
             GestureRecognized?.Invoke(new GestureEvent
             {
                 Type      = GestureType.OverhandRelease,
                 Source    = e.Source,
                 Phase     = GesturePhase.Ended,
                 Timestamp = e.Timestamp,
-                Payload   = new OverhandReleasePayload { NormalizedDepth = releaseNorm }
+                Payload   = new OverhandReleasePayload { NormalizedDepth = Mathf.Clamp01(e.Position.y / Screen.height) }
             });
-            _grabActive = false;
         }
     }
 

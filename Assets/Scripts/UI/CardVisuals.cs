@@ -3,7 +3,8 @@ using UnityEngine;
 /// Static helpers for placeholder card rendering. No art files required.
 public static class CardVisuals
 {
-    private static readonly string[] Ranks = { "A","2","3","4","5","6","7","8","9","10","J","Q","K" };
+    // Index matches DeckEngine.GetRank: 0=2 ... 12=Ace
+    private static readonly string[] Ranks = { "2","3","4","5","6","7","8","9","10","J","Q","K","A" };
     private static readonly string[] Suits = { "♥","♦","♣","♠" };
 
     private static readonly Color[] BgColors =

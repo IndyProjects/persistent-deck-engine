@@ -21,8 +21,19 @@ public class GestureRecognizerDispatcher
         reader.ButtonEvent  += OnButton;
     }
 
+    /// Pointer events go only to capturing recognizers if any exist, otherwise to all.
+    /// Uncaptured recognizers must disambiguate among themselves (drag direction, press duration).
     private void OnPointer(RawPointerEvent e)
     {
+        bool captured = false;
+        foreach (var r in _recognizers)
+        {
+            if (!r.CapturesPointer) continue;
+            captured = true;
+            r.OnPointerEvent(e);
+        }
+        if (captured) return;
+
         foreach (var r in _recognizers) r.OnPointerEvent(e);
     }
 

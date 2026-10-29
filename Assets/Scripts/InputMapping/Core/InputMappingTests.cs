@@ -136,7 +136,85 @@ public class InputMappingTests : MonoBehaviour
         Assert("Integration: Cut produces valid deck", DeckEngine.ValidateDeck(cutDeck));
         Assert("Integration: Cut bottom half now at front", cutDeck[0] == cr.Params.Position);
 
+        // --- Pointer arbitration: one physical gesture → exactly one recognized gesture ---
+        var dispatcher = new GestureRecognizerDispatcher();
+        var riffleRec  = new RiffleRecognizer();
+        dispatcher.Register(new CutRecognizer());
+        dispatcher.Register(riffleRec);
+        dispatcher.Register(new OverhandRecognizer());
+        var fakeReader = new FakePointerReader();
+        dispatcher.Subscribe(fakeReader);
+        var seen = new List<GestureType>();
+        dispatcher.GestureRecognized += g => seen.Add(g.Type);
+
+        fakeReader.Drag(new Vector2(100, 300), new Vector2(400, 320), 0, 0.2);
+        Assert("Arbitration: horizontal drag → Cut only", seen.Count == 1 && seen[0] == GestureType.Cut);
+
+        seen.Clear();
+        fakeReader.Drag(new Vector2(300, 100), new Vector2(310, 400), 1, 1.2);
+        Assert("Arbitration: vertical drag → Overhand grab+release only",
+            seen.Count == 2 && seen[0] == GestureType.OverhandGrab && seen[1] == GestureType.OverhandRelease);
+
+        seen.Clear();
+        fakeReader.Tap(new Vector2(300, 300), 2, 2.1);
+        Assert("Arbitration: short tap with no riffle → nothing", seen.Count == 0);
+
+        fakeReader.Tap(new Vector2(300, 300), 3, 3.0 + InputConstants.LongPressSeconds);
+        Assert("Arbitration: long press → RiffleStart", seen.Count == 1 && seen[0] == GestureType.RiffleStart);
+        Assert("Arbitration: riffle captures pointer", riffleRec.CapturesPointer);
+
+        seen.Clear();
+        fakeReader.Drag(new Vector2(100, 300), new Vector2(400, 320), 5, 5.2);
+        Assert("Arbitration: drag during riffle → ignored (no Cut)", seen.Count == 0);
+        fakeReader.Tap(new Vector2(300, 300), 6, 6.1);
+        Assert("Arbitration: tap during riffle → RiffleDrop", seen.Count == 1 && seen[0] == GestureType.RiffleDrop);
+
+        riffleRec.EndRiffle();
+        seen.Clear();
+        fakeReader.Drag(new Vector2(100, 300), new Vector2(400, 320), 7, 7.2);
+        Assert("Arbitration: after riffle ends, drag → Cut again", seen.Count == 1 && seen[0] == GestureType.Cut);
+
+        // --- Session manager: replacing a riffle keeps it active while the old one is cancelled ---
+        var sm = new GestureSessionManager();
+        bool activeDuringCancel = false;
+        sm.SessionEnded += s => activeDuringCancel = s.IsCancelled && sm.IsActive(GestureType.RiffleStart);
+        sm.OnGestureEvent(RiffleStart(0.5f));
+        sm.OnGestureEvent(RiffleStart(0.3f));
+        Assert("SessionManager: new riffle registered before old one cancelled", activeDuringCancel);
+
         Debug.Log($"\n=== InputMapping Tests: {passed} passed, {failed} failed ===");
+    }
+
+    /// Emits synthetic pointer sequences in the same shape MouseInputReader produces.
+    private class FakePointerReader : IInputReader
+    {
+        public event Action<RawPointerEvent> PointerEvent;
+        public event Action<RawAxisEvent>    AxisEvent    { add { } remove { } }
+        public event Action<RawButtonEvent>  ButtonEvent  { add { } remove { } }
+
+        public void Enable()  { }
+        public void Disable() { }
+        public void Poll()    { }
+
+        public void Drag(Vector2 from, Vector2 to, double t0, double t1)
+        {
+            Emit(from, GesturePhase.Began,   t0);
+            Emit(to,   GesturePhase.Updated, (t0 + t1) * 0.5);
+            Emit(to,   GesturePhase.Ended,   t1);
+        }
+
+        public void Tap(Vector2 at, double t0, double t1)
+        {
+            Emit(at, GesturePhase.Began, t0);
+            Emit(at, GesturePhase.Ended, t1);
+        }
+
+        private void Emit(Vector2 pos, GesturePhase phase, double t)
+            => PointerEvent?.Invoke(new RawPointerEvent
+            {
+                Position = pos, Phase = phase, Timestamp = t,
+                Pressure = 1f, Source = InputSource.Mouse
+            });
     }
 
 

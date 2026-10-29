@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem.EnhancedTouch;
 using Touch      = UnityEngine.InputSystem.EnhancedTouch.Touch;
@@ -14,8 +15,11 @@ public class TouchInputReader : IInputReader
 
     private bool _enabled;
 
+    // Fingers whose touch began on a UI control — ignored until they lift
+    private readonly HashSet<int> _uiFingers = new HashSet<int>();
+
     public void Enable()  => _enabled = true;
-    public void Disable() => _enabled = false;
+    public void Disable() { _enabled = false; _uiFingers.Clear(); }
 
     /// Call each frame from InputCoordinator.Update().
     public void Poll()
@@ -35,12 +39,22 @@ public class TouchInputReader : IInputReader
                 _                    => GesturePhase.Updated
             };
 
+            int finger = touch.finger.index;
+            if (phase == GesturePhase.Began && PointerUIFilter.IsOverInteractableUI(touch.screenPosition))
+                _uiFingers.Add(finger);
+            if (_uiFingers.Contains(finger))
+            {
+                if (phase == GesturePhase.Ended || phase == GesturePhase.Cancelled)
+                    _uiFingers.Remove(finger);
+                continue;
+            }
+
             float pressure = touch.pressure;
             if (pressure < InputConstants.PressureMinimum) pressure = 1f; // fallback for devices without pressure
 
             PointerEvent?.Invoke(new RawPointerEvent
             {
-                DeviceId      = touch.finger.index,
+                DeviceId      = finger,
                 Position      = touch.screenPosition,
                 DeltaPosition = touch.delta,
                 Pressure      = pressure,

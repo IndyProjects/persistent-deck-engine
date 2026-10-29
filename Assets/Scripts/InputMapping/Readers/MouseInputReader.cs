@@ -10,10 +10,11 @@ public class MouseInputReader : IInputReader
 
     private bool    _enabled;
     private bool    _dragging;
+    private bool    _pressOnUI;
     private Vector2 _dragStart;
 
     public void Enable()  => _enabled = true;
-    public void Disable() { _enabled = false; _dragging = false; }
+    public void Disable() { _enabled = false; _dragging = false; _pressOnUI = false; }
 
     public void Poll()
     {
@@ -25,7 +26,16 @@ public class MouseInputReader : IInputReader
         double t = Time.realtimeSinceStartupAsDouble;
         Vector2 pos = mouse.position.ReadValue();
 
-        if (mouse.leftButton.wasPressedThisFrame)
+        // Presses that start on a UI control belong to the UI until released
+        if (_pressOnUI)
+        {
+            if (!mouse.leftButton.isPressed) _pressOnUI = false;
+        }
+        else if (mouse.leftButton.wasPressedThisFrame && PointerUIFilter.IsOverInteractableUI(pos))
+        {
+            _pressOnUI = true;
+        }
+        else if (mouse.leftButton.wasPressedThisFrame)
         {
             _dragging  = false;
             _dragStart = pos;

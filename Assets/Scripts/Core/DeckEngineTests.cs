@@ -58,8 +58,19 @@ public class DeckEngineTests : MonoBehaviour
         int[] riffle = DeckEngine.RiffleShuffle(ordered, 26, new int[]{1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
                                                                          1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1});
         Assert("RiffleShuffle: valid deck output", DeckEngine.ValidateDeck(riffle));
-        Assert("RiffleShuffle: first card from left half", riffle[0] == 0);
-        Assert("RiffleShuffle: second card from right half", riffle[1] == 26);
+        // Cards drop from the bottom of each packet, left first, so the first drop lands at the bottom
+        Assert("RiffleShuffle: first drop (left packet bottom) is at deck bottom", riffle[51] == 25);
+        Assert("RiffleShuffle: second drop (right packet bottom) is above it", riffle[50] == 51);
+        Assert("RiffleShuffle: last drop (right packet top) is on top", riffle[0] == 26);
+        Assert("RiffleShuffle: left packet top is second", riffle[1] == 0);
+
+        // Uneven pattern: 3 from left, 2 from right, then singles
+        int[] riffleUneven = DeckEngine.RiffleShuffle(ordered, 26, new int[]{3, 2});
+        Assert("RiffleShuffle: uneven pattern valid", DeckEngine.ValidateDeck(riffleUneven));
+        Assert("RiffleShuffle: first 3-card drop keeps packet order at bottom",
+            riffleUneven[49] == 23 && riffleUneven[50] == 24 && riffleUneven[51] == 25);
+        Assert("RiffleShuffle: 2-card right drop above it",
+            riffleUneven[47] == 50 && riffleUneven[48] == 51);
         Assert("RiffleShuffle: original unmutated", ordered[0] == 0);
 
         // Drop pattern larger than remaining cards — engine should clamp gracefully

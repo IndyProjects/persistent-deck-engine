@@ -5,6 +5,7 @@ using UnityEngine;
 public class CollectRecognizer : IGestureRecognizer
 {
     public GestureType Handles => GestureType.CollectPile;
+    public bool CapturesPointer => false;
     public event Action<GestureEvent> GestureRecognized;
 
     private int _nextGamepadPile = 0;

@@ -18,8 +18,10 @@ public class GameStateView : MonoBehaviour
 
     private void Start()
     {
-        var bridge = GetComponent<GameStateManagerBridge>()
-                  ?? FindObjectOfType<GameStateManagerBridge>();
+        // Explicit null check: `??` bypasses Unity's overloaded == and misses destroyed/missing components
+        var bridge = GetComponent<GameStateManagerBridge>();
+        if (bridge == null)
+            bridge = FindAnyObjectByType<GameStateManagerBridge>();
 
         if (bridge == null)
         {

@@ -12,6 +12,8 @@ public class GestureSessionManager
 
     public int ActivePileCount { get; set; } = 1;
 
+    public bool IsActive(GestureType key) => _active.ContainsKey(key);
+
     public void OnGestureEvent(GestureEvent e)
     {
         switch (e.Type)
@@ -22,10 +24,17 @@ public class GestureSessionManager
 
             case GestureType.RiffleStart:
             {
-                CancelExisting(GestureType.RiffleStart);
+                // Register the new session before cancelling the old one so listeners of
+                // SessionEnded see a riffle still in progress.
+                _active.TryGetValue(GestureType.RiffleStart, out var previous);
                 var session = new RiffleSession();
                 session.AddEvent(e);
                 _active[GestureType.RiffleStart] = session;
+                if (previous != null)
+                {
+                    previous.Cancel();
+                    SessionEnded?.Invoke(previous);
+                }
                 break;
             }
 
@@ -103,16 +112,6 @@ public class GestureSessionManager
         {
             _active.Remove(key);
             SessionEnded?.Invoke(session);
-        }
-    }
-
-    private void CancelExisting(GestureType type)
-    {
-        if (_active.TryGetValue(type, out var existing))
-        {
-            existing.Cancel();
-            _active.Remove(type);
-            SessionEnded?.Invoke(existing);
         }
     }
 }

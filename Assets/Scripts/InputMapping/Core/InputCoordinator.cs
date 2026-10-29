@@ -14,6 +14,7 @@ public class InputCoordinator : MonoBehaviour
 
     private GestureRecognizerDispatcher _dispatcher;
     private GestureSessionManager       _sessionManager;
+    private RiffleRecognizer            _riffleRecognizer;
 
     private CutParamGenerator      _cutGen;
     private RiffleParamGenerator   _riffleGen;
@@ -50,7 +51,8 @@ public class InputCoordinator : MonoBehaviour
 
         _dispatcher = new GestureRecognizerDispatcher();
         _dispatcher.Register(new CutRecognizer());
-        _dispatcher.Register(new RiffleRecognizer());
+        _riffleRecognizer = new RiffleRecognizer();
+        _dispatcher.Register(_riffleRecognizer);
         _dispatcher.Register(new OverhandRecognizer());
         _dispatcher.Register(new DealRecognizer());
         _dispatcher.Register(new CollectRecognizer());
@@ -70,6 +72,11 @@ public class InputCoordinator : MonoBehaviour
 
     private void OnSessionEnded(IGestureSession session)
     {
+        // Release the riffle's pointer capture once no riffle session remains
+        // (a cancelled session replaced by a fresh RiffleStart keeps it).
+        if (session.GestureType == GestureType.RiffleStart && !_sessionManager.IsActive(GestureType.RiffleStart))
+            _riffleRecognizer.EndRiffle();
+
         if (session.IsCancelled)
         {
             Debug.LogWarning($"[InputCoordinator] {session.GestureType} session cancelled.");
