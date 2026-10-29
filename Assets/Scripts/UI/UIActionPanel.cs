@@ -86,7 +86,7 @@ public class UIActionPanel : MonoBehaviour
         trt.offsetMax = Vector2.zero;
 
         var txt = txtGO.GetComponent<Text>();
-        txt.font      = CardVisuals.DefaultFont;
+        txt.font      = HudStyle.DefaultFont;
         txt.fontSize  = 12;
         txt.alignment = TextAnchor.MiddleCenter;
         txt.color     = Color.white;

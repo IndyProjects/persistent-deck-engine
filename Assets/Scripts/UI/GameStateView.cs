@@ -1,7 +1,8 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-public class GameStateView : MonoBehaviour
+/// HUD bar drawn over the 3D table: phase, round and the action buttons.
+public class GameStateView : MonoBehaviour, IStateManagerConsumer
 {
     /// Injected by GameStateManagerBridge before Start.
     public GameStateManager StateManager { get; set; }
@@ -10,17 +11,12 @@ public class GameStateView : MonoBehaviour
 
     private Text         _phaseLabel;
     private Text         _roundLabel;
-    private DeckView     _deckView;
-    private HandsPanel   _handsPanel;
     private UIActionPanel _actionPanel;
-
-    private void Awake()
-    {
-        BuildCanvas();
-    }
 
     private void Start()
     {
+        BuildCanvas();
+
         _sm = StateManager;
         if (_sm == null)
         {
@@ -43,8 +39,6 @@ public class GameStateView : MonoBehaviour
     {
         _phaseLabel.text = $"Phase:  {s.Phase}";
         _roundLabel.text = $"Round:  {s.RoundNumber}";
-        _deckView.Refresh(s.Deck != null ? s.Deck.Length : 0);
-        _handsPanel.Refresh(s.Hands ?? System.Array.Empty<int[]>());
         _actionPanel.RefreshButtons(s);
     }
 
@@ -65,35 +59,13 @@ public class GameStateView : MonoBehaviour
         scaler.screenMatchMode   = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
         scaler.matchWidthOrHeight = 0.5f;
 
-        Img("BG", canvasGO.transform,
-            Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero,
-            CardVisuals.BoardColor);
-
         const float hudH = 54f;
         var hudGO = Img("HUD", canvasGO.transform,
             new Vector2(0, 1), new Vector2(1, 1),
             new Vector2(0, -hudH), Vector2.zero,
-            CardVisuals.PanelColor);
+            HudStyle.PanelColor);
 
         BuildHUD(hudGO.transform, hudH);
-
-        var deckAreaGO = Rect("DeckArea", canvasGO.transform,
-            new Vector2(0, 0), new Vector2(0.28f, 1),
-            Vector2.zero, new Vector2(0, -hudH));
-
-        var deckGO = Rect("DeckView", deckAreaGO.transform,
-            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(-45f, -60f), new Vector2(45f, 60f));
-        _deckView = deckGO.AddComponent<DeckView>();
-
-        var handsAreaGO = Rect("HandsArea", canvasGO.transform,
-            new Vector2(0.28f, 0), Vector2.one,
-            Vector2.zero, new Vector2(0, -hudH));
-
-        var hpGO = Rect("HandsPanel", handsAreaGO.transform,
-            new Vector2(0, 1), new Vector2(1, 1),
-            new Vector2(0, -500f), Vector2.zero);
-        _handsPanel = hpGO.AddComponent<HandsPanel>();
     }
 
     private void BuildHUD(Transform parent, float hudH)
@@ -136,14 +108,14 @@ public class GameStateView : MonoBehaviour
     {
         var go = Rect(name, parent, ancMin, ancMax, offMin, offMax);
         var img = go.AddComponent<Image>();
-        img.sprite = CardVisuals.SharedSprite;
+        img.sprite = HudStyle.SharedSprite;
         img.color  = color;
         return go;
     }
 
     private static void StyleLabel(Text t, int size, TextAnchor anchor)
     {
-        t.font      = CardVisuals.DefaultFont;
+        t.font      = HudStyle.DefaultFont;
         t.fontSize  = size;
         t.alignment = anchor;
         t.color     = Color.white;

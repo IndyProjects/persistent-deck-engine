@@ -6,7 +6,8 @@
         "UnityEditor.TestRunner",
         "PDE.Core",
         "PDE.GameState",
-        "PDE.InputMapping"
+        "PDE.InputMapping",
+        "PDE.View3D"
     ],
     "includePlatforms": [
         "Editor"

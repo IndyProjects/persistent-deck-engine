@@ -1,0 +1,22 @@
+{
+    "name": "PDE.Editor",
+    "rootNamespace": "",
+    "references": [
+        "PDE.Core",
+        "PDE.GameState",
+        "PDE.View3D",
+        "Unity.RenderPipelines.Core.Runtime",
+        "Unity.RenderPipelines.Universal.Runtime"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

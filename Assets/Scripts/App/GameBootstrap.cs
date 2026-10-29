@@ -2,9 +2,9 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem.UI;
 
-/// Makes any scene playable without manual wiring: creates the game root
-/// (InputCoordinator, GameStateView, GameStateManagerBridge) and a UI EventSystem
-/// unless the scene already contains them. Hand-placed setups always take precedence.
+/// Makes any scene playable without manual wiring: builds the themed table environment, the card
+/// view, the game root (input, HUD, state) and a UI EventSystem, unless the scene already contains them.
+/// Hand-placed setups always take precedence.
 public static class GameBootstrap
 {
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -17,10 +17,20 @@ public static class GameBootstrap
             es.AddComponent<InputSystemUIInputModule>().AssignDefaultActions();
         }
 
+        if (Object.FindAnyObjectByType<TableEnvironment>() == null)
+        {
+            var env = new GameObject("Table Environment");
+            env.AddComponent<TableEnvironment>(); // builds itself from ThemeService.Current in Awake
+            env.AddComponent<ThemeHotkey>();       // T cycles themes until there is a theme menu
+        }
+
+        if (Object.FindAnyObjectByType<TableCardView>() == null)
+            new GameObject("Cards").AddComponent<TableCardView>();
+
         if (Object.FindAnyObjectByType<GameStateManagerBridge>() != null)
             return;
 
-        // Order matters: the bridge's Awake looks up the coordinator and view to inject the state manager
+        // The bridge's Awake injects the state manager into every consumer, so it is added last
         var root = new GameObject("GameRoot");
         root.AddComponent<InputCoordinator>();
         root.AddComponent<GameStateView>();

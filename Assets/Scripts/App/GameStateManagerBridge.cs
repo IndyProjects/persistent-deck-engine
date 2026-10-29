@@ -1,32 +1,31 @@
 using UnityEngine;
 
-/// Composition root: creates the GameStateManager, restores the saved table, and hands the manager
-/// to the input and view layers. Saves the table when the app is paused or closed, so the deck
-/// keeps its exact order between sessions.
+/// Composition root: creates the GameStateManager, restores the saved table, and injects the manager
+/// into every IStateManagerConsumer in the scene (input, HUD, 3D card view, …). Saves the table when
+/// the app is paused or closed, so the deck keeps its exact order between sessions.
 public class GameStateManagerBridge : MonoBehaviour
 {
-    [SerializeField] InputCoordinator _coordinator;
-    [SerializeField] GameStateView    _view;
     [Tooltip("Load the table on start and save it on pause/quit.")]
-    [SerializeField] bool             _persistTable = true;
+    [SerializeField] bool _persistTable = true;
 
     public GameStateManager StateManager { get; private set; }
 
     private void Awake()
     {
-        if (_coordinator == null) _coordinator = GetComponent<InputCoordinator>();
-        if (_coordinator == null) _coordinator = FindAnyObjectByType<InputCoordinator>();
-        if (_view == null)        _view        = GetComponent<GameStateView>();
-        if (_view == null)        _view        = FindAnyObjectByType<GameStateView>();
-
         StateManager = new GameStateManager(new FreePlayRules());
         if (_persistTable)
             TableSaveStore.TryLoad(StateManager);
 
-        if (_coordinator != null) _coordinator.StateManager = StateManager;
-        else Debug.LogWarning("[GameStateManagerBridge] No InputCoordinator found; gestures are disabled.");
+        int injected = 0;
+        foreach (var behaviour in FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            if (behaviour is IStateManagerConsumer consumer)
+            {
+                consumer.StateManager = StateManager;
+                injected++;
+            }
 
-        if (_view != null) _view.StateManager = StateManager;
+        if (injected == 0)
+            Debug.LogWarning("[GameStateManagerBridge] No IStateManagerConsumer found; nothing will show or respond.");
     }
 
     private void OnApplicationPause(bool paused)

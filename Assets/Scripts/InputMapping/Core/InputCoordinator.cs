@@ -5,7 +5,7 @@ using UnityEngine.InputSystem.EnhancedTouch;
 
 /// Stage 2 entry point. Translates completed gesture sessions into GameOperations
 /// and applies them via GameStateManager and Set StateManager before gestures
-public class InputCoordinator : MonoBehaviour
+public class InputCoordinator : MonoBehaviour, IStateManagerConsumer
 {
     /// Injected by GameStateManagerBridge at runtime. Must be set for gestures to have any effect.
     public GameStateManager StateManager { get; set; }

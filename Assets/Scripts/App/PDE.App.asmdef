@@ -6,6 +6,7 @@
         "PDE.GameState",
         "PDE.InputMapping",
         "PDE.UI",
+        "PDE.View3D",
         "Unity.InputSystem",
         "UnityEngine.UI"
     ],
