@@ -3,6 +3,9 @@ using UnityEngine.UI;
 
 public class GameStateView : MonoBehaviour
 {
+    /// Injected by GameStateManagerBridge before Start.
+    public GameStateManager StateManager { get; set; }
+
     private GameStateManager _sm;
 
     private Text         _phaseLabel;
@@ -18,22 +21,17 @@ public class GameStateView : MonoBehaviour
 
     private void Start()
     {
-        // Explicit null check: `??` bypasses Unity's overloaded == and misses destroyed/missing components
-        var bridge = GetComponent<GameStateManagerBridge>();
-        if (bridge == null)
-            bridge = FindAnyObjectByType<GameStateManagerBridge>();
-
-        if (bridge == null)
+        _sm = StateManager;
+        if (_sm == null)
         {
-            Debug.LogError("[GameStateView] GameStateManagerBridge not found.");
+            Debug.LogError("[GameStateView] StateManager not set. Add GameStateManagerBridge to the scene.");
             return;
         }
 
-        _sm = bridge.StateManager;
         _actionPanel.Initialise(_sm);
         _sm.StateChanged += OnStateChanged;
 
-        OnStateChanged(new GameStateSnapshot(_sm.Phase, _sm.CurrentDeck, _sm.CurrentHands, _sm.RoundNumber));
+        OnStateChanged(_sm.TakeSnapshot());
     }
 
     private void OnDestroy()

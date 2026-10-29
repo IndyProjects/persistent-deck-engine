@@ -10,7 +10,10 @@ public class GestureSessionManager
     private readonly Dictionary<GestureType, IGestureSession> _active
         = new Dictionary<GestureType, IGestureSession>();
 
-    public int ActivePileCount { get; set; } = 1;
+    /// Live deck size, read when a shuffle session starts. Set by InputCoordinator.
+    public Func<int> DeckSize  { get; set; } = () => DeckEngine.DeckSize;
+    /// Live number of collectable piles, read when a collect session starts. Set by InputCoordinator.
+    public Func<int> PileCount { get; set; } = () => 1;
 
     public bool IsActive(GestureType key) => _active.ContainsKey(key);
 
@@ -27,7 +30,7 @@ public class GestureSessionManager
                 // Register the new session before cancelling the old one so listeners of
                 // SessionEnded see a riffle still in progress.
                 _active.TryGetValue(GestureType.RiffleStart, out var previous);
-                var session = new RiffleSession();
+                var session = new RiffleSession(DeckSize());
                 session.AddEvent(e);
                 _active[GestureType.RiffleStart] = session;
                 if (previous != null)
@@ -53,7 +56,7 @@ public class GestureSessionManager
             case GestureType.OverhandGrab:
             {
                 if (!_active.ContainsKey(GestureType.OverhandGrab))
-                    _active[GestureType.OverhandGrab] = new OverhandSession();
+                    _active[GestureType.OverhandGrab] = new OverhandSession(DeckSize());
                 _active[GestureType.OverhandGrab].AddEvent(e);
                 break;
             }
@@ -75,7 +78,7 @@ public class GestureSessionManager
             case GestureType.CollectPile:
             {
                 if (!_active.ContainsKey(GestureType.CollectPile))
-                    _active[GestureType.CollectPile] = new CollectSession(ActivePileCount);
+                    _active[GestureType.CollectPile] = new CollectSession(PileCount());
                 var cs = (CollectSession)_active[GestureType.CollectPile];
                 cs.AddEvent(e);
                 TryCloseSession(GestureType.CollectPile, cs);
@@ -89,7 +92,7 @@ public class GestureSessionManager
     {
         if (!_active.TryGetValue(GestureType.OverhandGrab, out var s))
         {
-            s = new OverhandSession();
+            s = new OverhandSession(DeckSize());
             _active[GestureType.OverhandGrab] = s;
         }
         if (s is OverhandSession os)

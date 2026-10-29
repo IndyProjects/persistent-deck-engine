@@ -3,6 +3,9 @@ using UnityEngine;
 
 public class CutParamGenerator : IParameterGenerator<CutParams>
 {
+    /// Size of the deck being cut; normalized positions map to 1..DeckSize-1.
+    public int DeckSize { get; set; } = DeckEngine.DeckSize;
+
     public ParameterResult<CutParams> Generate(List<GestureEvent> events)
     {
         if (events == null || events.Count == 0)
@@ -15,8 +18,11 @@ public class CutParamGenerator : IParameterGenerator<CutParams>
         if (float.IsNaN(payload.NormalizedPosition) || float.IsInfinity(payload.NormalizedPosition))
             return ParameterResult<CutParams>.Rejected("CutPayload.NormalizedPosition is NaN or Infinity.");
 
-        int raw      = Mathf.RoundToInt(payload.NormalizedPosition * 51f);
-        int clamped  = Mathf.Clamp(raw, 1, 51);
+        if (DeckSize < 2)
+            return ParameterResult<CutParams>.Rejected($"Cannot cut a deck of {DeckSize}.");
+
+        int raw      = Mathf.RoundToInt(payload.NormalizedPosition * (DeckSize - 1));
+        int clamped  = Mathf.Clamp(raw, 1, DeckSize - 1);
         var p        = new CutParams { Position = clamped };
 
         return (raw == clamped)

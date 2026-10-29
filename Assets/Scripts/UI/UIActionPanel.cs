@@ -40,38 +40,31 @@ public class UIActionPanel : MonoBehaviour
         _resetBtn.onClick.AddListener(() => _sm.Reset());
     }
 
+    /// Enables each button only if its operation would currently succeed (rules + physical dry run).
     public void RefreshButtons(GameStateSnapshot s)
     {
-        bool idle   = s.Phase == GamePhase.Idle;
-        bool inPlay = s.Phase == GamePhase.InPlay;
-        _dealBtn.interactable    = idle;
-        _cutBtn.interactable     = idle;
-        _shuffleBtn.interactable = idle;
-        _collectBtn.interactable = inPlay;
-        _undoBtn.interactable    = _sm != null && _sm.CanUndo;
+        if (_sm == null) return;
+        _dealBtn.interactable    = _sm.CanApply(DealOp()).Success;
+        _cutBtn.interactable     = _sm.CanApply(CutOp()).Success;
+        _shuffleBtn.interactable = _sm.CanApply(ShuffleOp()).Success;
+        _collectBtn.interactable = _sm.CanApply(CollectOperation.All()).Success;
+        _undoBtn.interactable    = _sm.CanUndo;
         _resetBtn.interactable   = true;
     }
 
-    private void OnDeal()    => _sm?.Apply(new DealOperation(2, 5));
-    private void OnCut()     => _sm?.Apply(new CutOperation(26));
-    private void OnShuffle() => _sm?.Apply(new OverhandOperation(new[] { 26, 26 }));
+    private int DeckCount => _sm.Table.Count(ZoneId.Deck);
 
-    private void OnCollect()
-    {
-        if (_sm == null) return;
-        int[][] hands = _sm.CurrentHands;
-        int[]   deck  = _sm.CurrentDeck;
-        bool    hasDeck = deck != null && deck.Length > 0;
+    // Cut and shuffle act on whatever is in the deck, split at the middle
+    private GameOperation DealOp()    => new DealOperation(2, 5);
+    private GameOperation CutOp()     => new CutOperation(DeckCount / 2);
+    private GameOperation ShuffleOp() => DeckCount < 2
+        ? new OverhandOperation(new[] { DeckCount })
+        : new OverhandOperation(new[] { DeckCount / 2, DeckCount - DeckCount / 2 });
 
-        var piles = new int[hands.Length + (hasDeck ? 1 : 0)][];
-        for (int i = 0; i < hands.Length; i++) piles[i] = hands[i];
-        if (hasDeck) piles[hands.Length] = deck;
-
-        var order = new int[piles.Length];
-        for (int i = 0; i < order.Length; i++) order[i] = i;
-
-        _sm.Apply(new CollectOperation(piles, order));
-    }
+    private void OnDeal()    => _sm?.Apply(DealOp());
+    private void OnCut()     => _sm?.Apply(CutOp());
+    private void OnShuffle() => _sm?.Apply(ShuffleOp());
+    private void OnCollect() => _sm?.Apply(CollectOperation.All());
 
     private Button Btn(string label)
     {

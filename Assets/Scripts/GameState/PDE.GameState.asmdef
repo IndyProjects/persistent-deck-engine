@@ -1,0 +1,16 @@
+{
+    "name": "PDE.GameState",
+    "rootNamespace": "",
+    "references": [
+        "PDE.Core"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

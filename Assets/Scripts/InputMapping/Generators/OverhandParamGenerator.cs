@@ -28,8 +28,8 @@ public class OverhandParamGenerator
             sum += c;
         }
 
-        if (sum != DeckEngine.DeckSize)
-            return ParameterResult<OverhandParams>.Rejected($"Chunk sum {sum} != {DeckEngine.DeckSize}.");
+        if (sum != session.DeckSize)
+            return ParameterResult<OverhandParams>.Rejected($"Chunk sum {sum} != {session.DeckSize}.");
 
         return ParameterResult<OverhandParams>.Valid(new OverhandParams { ChunkSizes = chunks.ToArray() });
     }

@@ -9,7 +9,11 @@ public class RiffleSession : GestureSession
     public int         LeftRemaining { get; private set; }
     public int         RightRemaining{ get; private set; }
 
-    public RiffleSession() : base(GestureType.RiffleStart) { }
+    /// Number of cards being riffled (the current deck size).
+    public int         DeckSize      { get; }
+
+    public RiffleSession(int deckSize = DeckEngine.DeckSize) : base(GestureType.RiffleStart)
+        => DeckSize = deckSize;
 
     public override void AddEvent(GestureEvent e)
     {
@@ -18,10 +22,11 @@ public class RiffleSession : GestureSession
 
         if (e.Type == GestureType.RiffleStart && e.Payload is RiffleStartPayload start)
         {
-            int split     = UnityEngine.Mathf.RoundToInt(start.NormalizedSplitPosition * 51f);
-            SplitIndex    = UnityEngine.Mathf.Clamp(split, 1, 51);
+            if (DeckSize < 2) { Cancel(); return; } // nothing to split
+            int split     = UnityEngine.Mathf.RoundToInt(start.NormalizedSplitPosition * (DeckSize - 1));
+            SplitIndex    = UnityEngine.Mathf.Clamp(split, 1, DeckSize - 1);
             LeftRemaining = SplitIndex;
-            RightRemaining= DeckEngine.DeckSize - SplitIndex;
+            RightRemaining= DeckSize - SplitIndex;
             CurrentSide   = ShuffleSide.Left;
             return;
         }

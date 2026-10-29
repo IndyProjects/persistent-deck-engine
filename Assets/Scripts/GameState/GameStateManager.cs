@@ -2,76 +2,103 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-
+/// Owns the CardTable and is the only way to change it. Every operation is checked against the
+/// active rule set, executed as an all-or-nothing transaction of CardMoves, and recorded so it can
+/// be undone exactly.
 public class GameStateManager
 {
-    public const int MaxHistorySize = 20;
+    public const int MaxHistorySize = 200;
 
-    public GamePhase Phase        { get; private set; } = GamePhase.Idle;
-    public int[]     CurrentDeck  { get; private set; }
-    public int[][]   CurrentHands { get; private set; } = Array.Empty<int[]>();
-    public int       RoundNumber  { get; private set; }
-    public bool      CanUndo      => _history.Count > 0;
+    public CardTable Table       { get; private set; }
+    public IRuleSet  Rules       { get; set; }
+    public int       RoundNumber { get; private set; }
+    public bool      CanUndo     => _history.Count > 0;
+    public GamePhase Phase       => PhaseOf(Table);
 
+    /// Cards in the deck, top first (a copy).
+    public int[]   CurrentDeck  => ToArray(Table.Cards(ZoneId.Deck));
+    /// Hands for seats 0..HandCount-1 (copies; unoccupied seats below the highest are empty arrays).
+    public int[][] CurrentHands => HandsOf(Table);
+
+    /// Fired after any change (apply, undo, reset, load) with a copy of the new state.
     public event Action<GameStateSnapshot>     StateChanged;
+    /// Fired after an action is applied (isUndo = false) or reverted (isUndo = true). Carries the
+    /// exact moves, so views can animate each card. Not fired for Reset/Load (use StateChanged).
+    public event Action<TableAction, bool>     ActionApplied;
     public event Action<GameOperation, string> OperationRejected;
 
-    private readonly List<GameStateSnapshot> _history = new List<GameStateSnapshot>();
+    private readonly List<HistoryEntry> _history = new List<HistoryEntry>();
 
-    public GameStateManager()
+    private readonly struct HistoryEntry
     {
-        CurrentDeck = DeckEngine.CreateOrderedDeck();
+        public readonly TableAction Action;
+        public readonly int         RoundBefore;
+        public HistoryEntry(TableAction action, int roundBefore) { Action = action; RoundBefore = roundBefore; }
     }
 
-    /// Checks phase legality
+    public GameStateManager(IRuleSet rules = null)
+    {
+        Rules = rules ?? new FreePlayRules();
+        Table = new CardTable();
+    }
+
+    public static GamePhase PhaseOf(CardTable table)
+        => table.Count(ZoneId.Deck) == DeckEngine.DeckSize ? GamePhase.Idle : GamePhase.InPlay;
+
     public OperationResult Apply(GameOperation op)
     {
-        var check = CanApply(op);
-        if (!check.Success)
+        var check = CanApplyRules(op);
+        if (!check.Success) return Rejected(op, check.Reason);
+
+        var tx = new TableTransaction(Table);
+        try
         {
-            OperationRejected?.Invoke(op, check.Reason);
-            Debug.LogWarning($"[GameState] {op.GetType().Name} rejected: {check.Reason}");
-            return check;
+            op.Execute(tx);
+        }
+        catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException)
+        {
+            tx.Rollback();
+            return Rejected(op, ex.Message);
         }
 
-        PushHistory();
-        Execute(op);
+        if (tx.Applied.Count == 0)
+            return Rejected(op, "Nothing to do.");
+
+        var action = new TableAction(op.Name, new List<CardMove>(tx.Applied));
+        _history.Add(new HistoryEntry(action, RoundNumber));
+        if (_history.Count > MaxHistorySize)
+            _history.RemoveAt(0);
+
+        if (op is CollectOperation && Phase == GamePhase.Idle)
+            RoundNumber++;
 
 #if UNITY_EDITOR
-        if (!AllCardsAccountedFor())
-            Debug.LogError($"[GameState] INVARIANT VIOLATED after {op.GetType().Name}: cards lost or duplicated!");
+        if (!Table.Validate())
+            Debug.LogError($"[GameState] INVARIANT VIOLATED after {op.Name}: cards lost or duplicated!");
 #endif
 
+        Debug.Log($"[GameState] {action} applied. Phase={Phase}, Round={RoundNumber}");
+        ActionApplied?.Invoke(action, false);
         StateChanged?.Invoke(TakeSnapshot());
-        Debug.Log($"[GameState] {op.GetType().Name} applied. Phase={Phase}, Round={RoundNumber}");
         return OperationResult.Ok();
     }
 
-    /// Dry-run phase check
+    /// Dry run: rules check plus physical feasibility, without changing anything.
     public OperationResult CanApply(GameOperation op)
     {
-        switch (op)
+        var check = CanApplyRules(op);
+        if (!check.Success) return check;
+
+        var tx = new TableTransaction(Table.Clone());
+        try
         {
-            case CutOperation _:
-            case RiffleOperation _:
-            case OverhandOperation _:
-                if (Phase == GamePhase.InPlay)
-                    return OperationResult.Reject("Cannot shuffle while hands are dealt.");
-                return OperationResult.Ok();
-
-            case DealOperation _:
-                if (Phase == GamePhase.InPlay)
-                    return OperationResult.Reject("Cards already dealt. Collect first.");
-                return OperationResult.Ok();
-
-            case CollectOperation _:
-                if (Phase == GamePhase.Idle)
-                    return OperationResult.Reject("No hands to collect.");
-                return OperationResult.Ok();
-
-            default:
-                return OperationResult.Reject($"Unknown operation type: {op.GetType().Name}");
+            op.Execute(tx);
         }
+        catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException)
+        {
+            return OperationResult.Reject(ex.Message);
+        }
+        return tx.Applied.Count > 0 ? OperationResult.Ok() : OperationResult.Reject("Nothing to do.");
     }
 
     public OperationResult Undo()
@@ -79,79 +106,67 @@ public class GameStateManager
         if (!CanUndo)
             return OperationResult.Reject("Nothing to undo.");
 
-        var snap     = _history[_history.Count - 1];
+        var entry = _history[_history.Count - 1];
         _history.RemoveAt(_history.Count - 1);
 
-        Phase        = snap.Phase;
-        CurrentDeck  = snap.Deck;
-        CurrentHands = snap.Hands;
-        RoundNumber  = snap.RoundNumber;
+        entry.Action.Undo(Table);
+        RoundNumber = entry.RoundBefore;
 
+        Debug.Log($"[GameState] Undo {entry.Action.Name}. Phase={Phase}, Round={RoundNumber}");
+        ActionApplied?.Invoke(entry.Action, true);
         StateChanged?.Invoke(TakeSnapshot());
-        Debug.Log($"[GameState] Undo. Phase={Phase}, Round={RoundNumber}");
         return OperationResult.Ok();
     }
 
-    /// Resets to an ordered deck
+    /// Resets to an ordered, face-down deck.
     public void Reset()
     {
-        Phase        = GamePhase.Idle;
-        CurrentDeck  = DeckEngine.CreateOrderedDeck();
-        CurrentHands = Array.Empty<int[]>();
-        RoundNumber  = 0;
+        Table       = new CardTable();
+        RoundNumber = 0;
         _history.Clear();
         StateChanged?.Invoke(TakeSnapshot());
     }
 
-    private void Execute(GameOperation op)
+    public TableSaveData CreateSaveData() => TableSaveData.From(Table, RoundNumber);
+
+    /// Replaces the table with saved state. Undo history is cleared. Throws ArgumentException on invalid data.
+    public void Load(TableSaveData data)
     {
-        switch (op)
-        {
-            case CutOperation cut:
-                CurrentDeck = DeckEngine.CutDeck(CurrentDeck, cut.Position);
-                break;
-
-            case RiffleOperation riffle:
-                CurrentDeck = DeckEngine.RiffleShuffle(CurrentDeck, riffle.SplitIndex, riffle.DropPattern);
-                break;
-
-            case OverhandOperation overhand:
-                CurrentDeck = DeckEngine.OverhandShuffle(CurrentDeck, overhand.ChunkSizes);
-                break;
-
-            case DealOperation deal:
-                var (hands, remaining) = DeckEngine.DealCards(CurrentDeck, deal.Players, deal.CardsEach);
-                CurrentHands = hands;
-                CurrentDeck  = remaining;
-                Phase        = GamePhase.InPlay;
-                break;
-
-            case CollectOperation collect:
-                CurrentDeck  = DeckEngine.CollectCards(collect.Piles, collect.Order);
-                CurrentHands = Array.Empty<int[]>();
-                Phase        = GamePhase.Idle;
-                RoundNumber++;
-                break;
-        }
+        if (data == null) throw new ArgumentNullException(nameof(data));
+        Table       = data.ToTable();
+        RoundNumber = data.roundNumber;
+        _history.Clear();
+        StateChanged?.Invoke(TakeSnapshot());
     }
 
-    /// True if the deck plus all hands together hold each of the 52 cards exactly once.
-    public bool AllCardsAccountedFor()
+    public GameStateSnapshot TakeSnapshot()
+        => new GameStateSnapshot(Phase, CurrentDeck, CurrentHands, RoundNumber, Table.Clone());
+
+    private OperationResult CanApplyRules(GameOperation op)
     {
-        var all = new List<int>(DeckEngine.DeckSize);
-        if (CurrentDeck != null) all.AddRange(CurrentDeck);
-        foreach (int[] hand in CurrentHands)
-            if (hand != null) all.AddRange(hand);
-        return DeckEngine.ValidateDeck(all.ToArray());
+        if (op == null) return OperationResult.Reject("Operation is null.");
+        return Rules.Check(op, Table);
     }
 
-    private void PushHistory()
+    private OperationResult Rejected(GameOperation op, string reason)
     {
-        _history.Add(TakeSnapshot());
-        if (_history.Count > MaxHistorySize)
-            _history.RemoveAt(0);
+        OperationRejected?.Invoke(op, reason);
+        Debug.LogWarning($"[GameState] {op?.Name ?? "null"} rejected: {reason}");
+        return OperationResult.Reject(reason);
     }
 
-    private GameStateSnapshot TakeSnapshot()
-        => new GameStateSnapshot(Phase, CurrentDeck, CurrentHands, RoundNumber);
+    private static int[][] HandsOf(CardTable table)
+    {
+        var hands = new int[table.HandCount()][];
+        for (int seat = 0; seat < hands.Length; seat++)
+            hands[seat] = ToArray(table.Cards(ZoneId.Hand(seat)));
+        return hands;
+    }
+
+    private static int[] ToArray(IReadOnlyList<int> cards)
+    {
+        var result = new int[cards.Count];
+        for (int i = 0; i < result.Length; i++) result[i] = cards[i];
+        return result;
+    }
 }

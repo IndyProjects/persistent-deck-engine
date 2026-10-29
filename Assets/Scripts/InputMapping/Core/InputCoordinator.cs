@@ -62,6 +62,9 @@ public class InputCoordinator : MonoBehaviour
         _sessionManager = new GestureSessionManager();
         _dispatcher.GestureRecognized += _sessionManager.OnGestureEvent;
         _sessionManager.SessionEnded  += OnSessionEnded;
+        // Sessions read live table state when they start, so they always match what is on the table
+        _sessionManager.DeckSize  = () => StateManager?.Table.Count(ZoneId.Deck) ?? DeckEngine.DeckSize;
+        _sessionManager.PileCount = () => StateManager != null ? CollectablePiles().Count : 1;
 
         _cutGen      = new CutParamGenerator();
         _riffleGen   = new RiffleParamGenerator();
@@ -93,6 +96,7 @@ public class InputCoordinator : MonoBehaviour
         {
             case GestureType.Cut:
             {
+                _cutGen.DeckSize = DeckSize();
                 var r = _cutGen.Generate(session.Events);
                 if (Rejected(r)) return;
                 LogClamped(r);
@@ -102,6 +106,7 @@ public class InputCoordinator : MonoBehaviour
 
             case GestureType.RiffleStart:
             {
+                _riffleGen.DeckSize = DeckSize();
                 var r = _riffleGen.Generate(session.Events);
                 if (Rejected(r)) return;
                 LogClamped(r);
@@ -119,47 +124,44 @@ public class InputCoordinator : MonoBehaviour
 
             case GestureType.DealStart:
             {
+                _dealGen.DeckSize = DeckSize();
                 var r = _dealGen.Generate(session.Events);
                 if (Rejected(r)) return;
                 LogClamped(r);
-                var op = StateManager.Apply(new DealOperation(r.Params.Players, r.Params.CardsEach));
-                if (op.Success)
-                    _sessionManager.ActivePileCount = PileCount();
+                StateManager.Apply(new DealOperation(r.Params.Players, r.Params.CardsEach));
                 break;
             }
 
             case GestureType.CollectPile when session is CollectSession cs:
             {
-                int[][] piles = BuildPiles();
+                var zones = CollectablePiles();
+                var piles = new int[zones.Count][];
+                for (int i = 0; i < zones.Count; i++)
+                    piles[i] = new List<int>(StateManager.Table.Cards(zones[i])).ToArray();
+
                 var r = _collectGen.GenerateFromSession(cs, piles);
                 if (Rejected(r)) return;
-                var op = StateManager.Apply(new CollectOperation(r.Params.Piles, r.Params.Order));
-                if (op.Success)
-                    _sessionManager.ActivePileCount = 1;
+
+                var order = new ZoneId[r.Params.Order.Length];
+                for (int i = 0; i < order.Length; i++)
+                    order[i] = zones[r.Params.Order[i]];
+                StateManager.Apply(new CollectOperation(order));
                 break;
             }
         }
     }
 
-    private int[][] BuildPiles()
+    /// Pile indices used by collect gestures: every non-empty zone in canonical order
+    /// (hands by seat, table piles, discards, held packets), with the deck last.
+    private List<ZoneId> CollectablePiles()
     {
-        int[][] hands         = StateManager.CurrentHands;
-        int[]   remainingDeck = StateManager.CurrentDeck;
-        bool    hasRemaining  = remainingDeck != null && remainingDeck.Length > 0;
-
-        int[][] piles = new int[hands.Length + (hasRemaining ? 1 : 0)][];
-        for (int i = 0; i < hands.Length; i++)
-            piles[i] = hands[i];
-        if (hasRemaining)
-            piles[hands.Length] = remainingDeck;
-        return piles;
+        var zones = CollectOperation.DefaultOrder(StateManager.Table);
+        if (StateManager.Table.Count(ZoneId.Deck) > 0)
+            zones.Add(ZoneId.Deck);
+        return zones;
     }
 
-    private int PileCount()
-    {
-        int[] deck = StateManager.CurrentDeck;
-        return StateManager.CurrentHands.Length + (deck != null && deck.Length > 0 ? 1 : 0);
-    }
+    private int DeckSize() => StateManager.Table.Count(ZoneId.Deck);
 
     private bool Rejected<T>(ParameterResult<T> r)
     {

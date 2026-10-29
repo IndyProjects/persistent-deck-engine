@@ -3,7 +3,7 @@ using UnityEngine.EventSystems;
 using UnityEngine.InputSystem.UI;
 
 /// Makes any scene playable without manual wiring: creates the game root
-/// (InputCoordinator → GameStateManagerBridge → GameStateView) and a UI EventSystem
+/// (InputCoordinator, GameStateView, GameStateManagerBridge) and a UI EventSystem
 /// unless the scene already contains them. Hand-placed setups always take precedence.
 public static class GameBootstrap
 {
@@ -20,10 +20,10 @@ public static class GameBootstrap
         if (Object.FindAnyObjectByType<GameStateManagerBridge>() != null)
             return;
 
-        // Order matters: the bridge's Awake looks up the coordinator on the same GameObject
+        // Order matters: the bridge's Awake looks up the coordinator and view to inject the state manager
         var root = new GameObject("GameRoot");
         root.AddComponent<InputCoordinator>();
-        root.AddComponent<GameStateManagerBridge>();
         root.AddComponent<GameStateView>();
+        root.AddComponent<GameStateManagerBridge>();
     }
 }

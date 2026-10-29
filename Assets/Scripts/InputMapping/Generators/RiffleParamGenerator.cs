@@ -3,6 +3,9 @@ using UnityEngine;
 
 public class RiffleParamGenerator : IParameterGenerator<RiffleParams>
 {
+    /// Size of the deck being riffled; normalized splits map to 1..DeckSize-1.
+    public int DeckSize { get; set; } = DeckEngine.DeckSize;
+
     public ParameterResult<RiffleParams> Generate(List<GestureEvent> events)
     {
         if (events == null || events.Count == 0)
@@ -16,8 +19,11 @@ public class RiffleParamGenerator : IParameterGenerator<RiffleParams>
         if (float.IsNaN(norm) || float.IsInfinity(norm))
             return ParameterResult<RiffleParams>.Rejected("RiffleStartPayload.NormalizedSplitPosition is invalid.");
 
-        int raw      = Mathf.RoundToInt(norm * 51f);
-        int split    = Mathf.Clamp(raw, 1, 51);
+        if (DeckSize < 2)
+            return ParameterResult<RiffleParams>.Rejected($"Cannot riffle a deck of {DeckSize}.");
+
+        int raw      = Mathf.RoundToInt(norm * (DeckSize - 1));
+        int split    = Mathf.Clamp(raw, 1, DeckSize - 1);
         bool clamped = (raw != split);
 
         // Collect drop counts

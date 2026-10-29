@@ -4,11 +4,18 @@ using System.Collections.Generic;
 public class OverhandSession : GestureSession
 {
     public List<int> ChunkSizes     { get; } = new List<int>();
-    public int       CardsRemaining { get; private set; } = DeckEngine.DeckSize;
+    /// Number of cards being shuffled (the current deck size).
+    public int       DeckSize       { get; }
+    public int       CardsRemaining { get; private set; }
 
     private float _grabDepth = -1f;
 
-    public OverhandSession() : base(GestureType.OverhandGrab) { }
+    public OverhandSession(int deckSize = DeckEngine.DeckSize) : base(GestureType.OverhandGrab)
+    {
+        DeckSize       = deckSize;
+        CardsRemaining = deckSize;
+        if (deckSize < 1) Cancel(); // nothing to shuffle; ends on the next release
+    }
 
     public override void AddEvent(GestureEvent e)
     {
@@ -30,7 +37,7 @@ public class OverhandSession : GestureSession
             }
 
             int chunk = UnityEngine.Mathf.RoundToInt(
-                UnityEngine.Mathf.Abs(release.NormalizedDepth - _grabDepth) * DeckEngine.DeckSize);
+                UnityEngine.Mathf.Abs(release.NormalizedDepth - _grabDepth) * DeckSize);
             chunk = UnityEngine.Mathf.Max(1, chunk);
             chunk = UnityEngine.Mathf.Min(chunk, CardsRemaining);
 
