@@ -109,6 +109,27 @@ public class CardTable
         return DeckEngine.ValidateDeck(all.ToArray());
     }
 
+    /// True if both tables hold the same cards in the same zones, positions and faces.
+    public bool SameAs(CardTable other)
+    {
+        if (other == null) return false;
+        var zones = NonEmptyZones();
+        var otherZones = other.NonEmptyZones();
+        if (zones.Count != otherZones.Count) return false;
+        for (int z = 0; z < zones.Count; z++)
+        {
+            if (zones[z] != otherZones[z]) return false;
+            var a = Cards(zones[z]);
+            var b = other.Cards(zones[z]);
+            if (a.Count != b.Count) return false;
+            for (int i = 0; i < a.Count; i++)
+                if (a[i] != b[i]) return false;
+        }
+        for (int card = 0; card < DeckEngine.DeckSize; card++)
+            if (_faceUp[card] != other._faceUp[card]) return false;
+        return true;
+    }
+
     // ---- Mutation ----
 
     /// Validates and applies a move. Returns the resolved move (Bottom sentinels replaced by concrete

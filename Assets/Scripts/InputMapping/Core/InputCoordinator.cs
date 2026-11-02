@@ -63,7 +63,7 @@ public class InputCoordinator : MonoBehaviour, IStateManagerConsumer
         _dispatcher.GestureRecognized += _sessionManager.OnGestureEvent;
         _sessionManager.SessionEnded  += OnSessionEnded;
         // Sessions read live table state when they start, so they always match what is on the table
-        _sessionManager.DeckSize  = () => StateManager?.Table.Count(ZoneId.Deck) ?? DeckEngine.DeckSize;
+        _sessionManager.DeckSize  = () => StateManager != null ? DeckSize() : DeckEngine.DeckSize;
         _sessionManager.PileCount = () => StateManager != null ? CollectablePiles().Count : 1;
 
         _cutGen      = new CutParamGenerator();
@@ -100,7 +100,7 @@ public class InputCoordinator : MonoBehaviour, IStateManagerConsumer
                 var r = _cutGen.Generate(session.Events);
                 if (Rejected(r)) return;
                 LogClamped(r);
-                StateManager.Apply(new CutOperation(r.Params.Position));
+                StateManager.Apply(new CutOperation(r.Params.Position, ShuffleSource()));
                 break;
             }
 
@@ -110,7 +110,7 @@ public class InputCoordinator : MonoBehaviour, IStateManagerConsumer
                 var r = _riffleGen.Generate(session.Events);
                 if (Rejected(r)) return;
                 LogClamped(r);
-                StateManager.Apply(new RiffleOperation(r.Params.SplitIndex, r.Params.DropPattern));
+                StateManager.Apply(new RiffleOperation(r.Params.SplitIndex, r.Params.DropPattern, ShuffleSource()));
                 break;
             }
 
@@ -118,7 +118,7 @@ public class InputCoordinator : MonoBehaviour, IStateManagerConsumer
             {
                 var r = _overhandGen.GenerateFromSession(os);
                 if (Rejected(r)) return;
-                StateManager.Apply(new OverhandOperation(r.Params.ChunkSizes));
+                StateManager.Apply(new OverhandOperation(r.Params.ChunkSizes, ShuffleSource()));
                 break;
             }
 
@@ -161,7 +161,11 @@ public class InputCoordinator : MonoBehaviour, IStateManagerConsumer
         return zones;
     }
 
-    private int DeckSize() => StateManager.Table.Count(ZoneId.Deck);
+    /// Shuffle gestures act on the deck in the dealer's hand when it's held, otherwise on the table.
+    private ZoneId ShuffleSource()
+        => StateManager.Table.Count(ZoneId.RightHand) > 0 ? ZoneId.RightHand : ZoneId.Deck;
+
+    private int DeckSize() => StateManager.Table.Count(ShuffleSource());
 
     private bool Rejected<T>(ParameterResult<T> r)
     {

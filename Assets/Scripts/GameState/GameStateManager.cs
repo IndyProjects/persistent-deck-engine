@@ -10,9 +10,12 @@ public class GameStateManager
     public const int MaxHistorySize = 200;
 
     public CardTable Table       { get; private set; }
+    /// Every action taken with this deck (persisted), for card journeys, replays and mix statistics.
+    /// Separate from the undo stack: undoing is itself logged.
+    public DeckHistory History   { get; private set; }
     public IRuleSet  Rules       { get; set; }
     public int       RoundNumber { get; private set; }
-    public bool      CanUndo     => _history.Count > 0;
+    public bool      CanUndo     => _undo.Count > 0;
     public GamePhase Phase       => PhaseOf(Table);
 
     /// Cards in the deck, top first (a copy).
@@ -27,19 +30,29 @@ public class GameStateManager
     public event Action<TableAction, bool>     ActionApplied;
     public event Action<GameOperation, string> OperationRejected;
 
-    private readonly List<HistoryEntry> _history = new List<HistoryEntry>();
+    private readonly List<HistoryEntry> _undo = new List<HistoryEntry>();
 
     private readonly struct HistoryEntry
     {
         public readonly TableAction Action;
         public readonly int         RoundBefore;
-        public HistoryEntry(TableAction action, int roundBefore) { Action = action; RoundBefore = roundBefore; }
+        public readonly string      RulesStateBefore;
+
+        public HistoryEntry(TableAction action, int roundBefore, string rulesStateBefore)
+        {
+            Action           = action;
+            RoundBefore      = roundBefore;
+            RulesStateBefore = rulesStateBefore;
+        }
     }
+
+    private IStatefulRuleSet StatefulRules => Rules as IStatefulRuleSet;
 
     public GameStateManager(IRuleSet rules = null)
     {
-        Rules = rules ?? new FreePlayRules();
-        Table = new CardTable();
+        Rules   = rules ?? new FreePlayRules();
+        Table   = new CardTable();
+        History = new DeckHistory(Table);
     }
 
     public static GamePhase PhaseOf(CardTable table)
@@ -61,16 +74,18 @@ public class GameStateManager
             return Rejected(op, ex.Message);
         }
 
-        if (tx.Applied.Count == 0)
+        if (tx.Applied.Count == 0 && !op.AllowNoMoves)
             return Rejected(op, "Nothing to do.");
 
         var action = new TableAction(op.Name, new List<CardMove>(tx.Applied));
-        _history.Add(new HistoryEntry(action, RoundNumber));
-        if (_history.Count > MaxHistorySize)
-            _history.RemoveAt(0);
+        _undo.Add(new HistoryEntry(action, RoundNumber, StatefulRules?.SaveState()));
+        History.Record(new DeckHistory.Entry(op.Name, RoundNumber, DeckHistory.KindOf(op), action.Moves));
+        if (_undo.Count > MaxHistorySize)
+            _undo.RemoveAt(0);
 
         if (op is CollectOperation && Phase == GamePhase.Idle)
             RoundNumber++;
+        StatefulRules?.OnApplied(op, Table);
 
 #if UNITY_EDITOR
         if (!Table.Validate())
@@ -98,7 +113,7 @@ public class GameStateManager
         {
             return OperationResult.Reject(ex.Message);
         }
-        return tx.Applied.Count > 0 ? OperationResult.Ok() : OperationResult.Reject("Nothing to do.");
+        return tx.Applied.Count > 0 || op.AllowNoMoves ? OperationResult.Ok() : OperationResult.Reject("Nothing to do.");
     }
 
     public OperationResult Undo()
@@ -106,11 +121,15 @@ public class GameStateManager
         if (!CanUndo)
             return OperationResult.Reject("Nothing to undo.");
 
-        var entry = _history[_history.Count - 1];
-        _history.RemoveAt(_history.Count - 1);
+        var entry = _undo[_undo.Count - 1];
+        _undo.RemoveAt(_undo.Count - 1);
 
         entry.Action.Undo(Table);
+        var inverse = new List<CardMove>(entry.Action.Moves.Count);
+        for (int i = entry.Action.Moves.Count - 1; i >= 0; i--) inverse.Add(entry.Action.Moves[i].Inverse());
+        History.Record(new DeckHistory.Entry($"Undo {entry.Action.Name}", RoundNumber, ActionKind.Undo, inverse));
         RoundNumber = entry.RoundBefore;
+        StatefulRules?.LoadState(entry.RulesStateBefore);
 
         Debug.Log($"[GameState] Undo {entry.Action.Name}. Phase={Phase}, Round={RoundNumber}");
         ActionApplied?.Invoke(entry.Action, true);
@@ -123,11 +142,19 @@ public class GameStateManager
     {
         Table       = new CardTable();
         RoundNumber = 0;
-        _history.Clear();
+        History     = new DeckHistory(Table);
+        _undo.Clear();
+        StatefulRules?.LoadState(null);
         StateChanged?.Invoke(TakeSnapshot());
     }
 
-    public TableSaveData CreateSaveData() => TableSaveData.From(Table, RoundNumber);
+    public TableSaveData CreateSaveData()
+    {
+        var data = TableSaveData.From(Table, RoundNumber);
+        data.rulesState = StatefulRules?.SaveState();
+        data.history    = History.ToSave();
+        return data;
+    }
 
     /// Replaces the table with saved state. Undo history is cleared. Throws ArgumentException on invalid data.
     public void Load(TableSaveData data)
@@ -135,8 +162,25 @@ public class GameStateManager
         if (data == null) throw new ArgumentNullException(nameof(data));
         Table       = data.ToTable();
         RoundNumber = data.roundNumber;
-        _history.Clear();
+        _undo.Clear();
+        History = RestoreHistory(data, Table);
+        StatefulRules?.LoadState(data.rulesState);
         StateChanged?.Invoke(TakeSnapshot());
+    }
+
+    /// A saved history is kept only if it leads exactly to the saved table; otherwise the log restarts.
+    private static DeckHistory RestoreHistory(TableSaveData data, CardTable table)
+    {
+        if (data.history == null) return new DeckHistory(table);
+        try
+        {
+            return DeckHistory.FromSave(data.history, table);
+        }
+        catch (ArgumentException ex)
+        {
+            Debug.LogWarning($"[GameState] Saved history ignored: {ex.Message}");
+            return new DeckHistory(table);
+        }
     }
 
     public GameStateSnapshot TakeSnapshot()

@@ -6,7 +6,9 @@
         "PDE.GameState",
         "PDE.View3D",
         "Unity.RenderPipelines.Core.Runtime",
-        "Unity.RenderPipelines.Universal.Runtime"
+        "Unity.RenderPipelines.Universal.Runtime",
+        "PDE.App",
+        "UnityEngine.UI"
     ],
     "includePlatforms": [
         "Editor"

@@ -1,16 +1,24 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-/// HUD bar drawn over the 3D table: phase, round and the action buttons.
+/// HUD bar drawn over the 3D table: round, what the rules expect next, the last rejection, and the
+/// action buttons.
 public class GameStateView : MonoBehaviour, IStateManagerConsumer
 {
     /// Injected by GameStateManagerBridge before Start.
     public GameStateManager StateManager { get; set; }
 
+    /// Hooks into interactions, panels and navigation. Set by GameStateManagerBridge before Start.
+    public HudHandlers Handlers { get; set; }
+
+    /// Which game is running, and an optional note shown under the status (set before Start).
+    public string GameName { get; set; }
+    public string GameNote { get; set; }
+
     private GameStateManager _sm;
 
-    private Text         _phaseLabel;
-    private Text         _roundLabel;
+    private Text         _statusLabel;
+    private string       _lastRejection;
     private UIActionPanel _actionPanel;
 
     private void Start()
@@ -24,22 +32,41 @@ public class GameStateView : MonoBehaviour, IStateManagerConsumer
             return;
         }
 
-        _actionPanel.Initialise(_sm);
-        _sm.StateChanged += OnStateChanged;
+        _actionPanel.Initialise(_sm, Handlers);
+        _sm.StateChanged      += OnStateChanged;
+        _sm.OperationRejected += OnRejected;
 
         OnStateChanged(_sm.TakeSnapshot());
     }
 
     private void OnDestroy()
     {
-        if (_sm != null) _sm.StateChanged -= OnStateChanged;
+        if (_sm == null) return;
+        _sm.StateChanged      -= OnStateChanged;
+        _sm.OperationRejected -= OnRejected;
     }
 
     private void OnStateChanged(GameStateSnapshot s)
     {
-        _phaseLabel.text = $"Phase:  {s.Phase}";
-        _roundLabel.text = $"Round:  {s.RoundNumber}";
+        _lastRejection = null;
+        RefreshStatus(s.RoundNumber);
         _actionPanel.RefreshButtons(s);
+    }
+
+    private void OnRejected(GameOperation op, string reason)
+    {
+        _lastRejection = reason;
+        RefreshStatus(_sm.RoundNumber);
+    }
+
+    private void RefreshStatus(int round)
+    {
+        string game = string.IsNullOrEmpty(GameName) ? "" : $"<b>{GameName}</b>  ·  ";
+        string status = $"{game}Round {round}  ·  {_sm.Rules.Describe(_sm.Table)}";
+        string second = _lastRejection != null ? $"<color=#ffb070>{_lastRejection}</color>"
+                      : !string.IsNullOrEmpty(GameNote) ? $"<color=#b8b2a6><i>{GameNote}</i></color>"
+                      : null;
+        _statusLabel.text = second == null ? status : $"{status}\n{second}";
     }
 
 
@@ -71,20 +98,15 @@ public class GameStateView : MonoBehaviour, IStateManagerConsumer
     private void BuildHUD(Transform parent, float hudH)
     {
 
-        var plGO = Rect("PhaseLabel", parent,
-            new Vector2(0, 0), new Vector2(0.2f, 1),
-            Vector2.zero, Vector2.zero);
-        _phaseLabel = plGO.AddComponent<Text>();
-        StyleLabel(_phaseLabel, 14, TextAnchor.MiddleCenter);
-
-        var rlGO = Rect("RoundLabel", parent,
-            new Vector2(0.2f, 0), new Vector2(0.36f, 1),
-            Vector2.zero, Vector2.zero);
-        _roundLabel = rlGO.AddComponent<Text>();
-        StyleLabel(_roundLabel, 14, TextAnchor.MiddleCenter);
+        var slGO = Rect("Status", parent,
+            new Vector2(0, 0), new Vector2(0.32f, 1),
+            new Vector2(12f, 0f), Vector2.zero);
+        _statusLabel = slGO.AddComponent<Text>();
+        StyleLabel(_statusLabel, 13, TextAnchor.MiddleLeft);
+        _statusLabel.supportRichText = true;
 
         var apGO = Rect("Actions", parent,
-            new Vector2(0.36f, 0), Vector2.one,
+            new Vector2(0.32f, 0), Vector2.one,
             Vector2.zero, Vector2.zero);
         _actionPanel = apGO.AddComponent<UIActionPanel>();
     }

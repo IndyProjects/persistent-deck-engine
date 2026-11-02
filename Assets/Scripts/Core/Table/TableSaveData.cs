@@ -12,6 +12,31 @@ public class TableSaveData
     public int        roundNumber;
     public ZoneData[] zones;
     public int[]      faceUpCards;
+    /// Opaque state of the active rule set (e.g. whose turn it is to be dealt to); null if none.
+    public string     rulesState;
+    /// Recent action log (where every card has been); null in older saves.
+    public HistorySaveData history;
+
+    /// Serialised DeckHistory: the table before the first logged action, then each action's moves.
+    [Serializable]
+    public class HistorySaveData
+    {
+        public ZoneData[]  originZones;
+        public int[]       originFaceUp;
+        public EntryData[] entries;
+    }
+
+    [Serializable]
+    public class EntryData
+    {
+        public string name;
+        public int    round;
+        public int    kind;
+        /// Resolved moves, MoveInts ints each: fromKind, fromIndex, fromPos, count, toKind, toIndex, toPos, flip.
+        public int[]  moves;
+    }
+
+    public const int MoveInts = 8;
 
     [Serializable]
     public class ZoneData

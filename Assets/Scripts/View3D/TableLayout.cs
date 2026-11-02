@@ -77,15 +77,11 @@ public class TableLayout
             }
 
             case ZoneKind.Pile:
-            {
-                int col = zone.Index % 6, row = zone.Index / 6;
-                var anchor = new Vector3((col - 2.5f) * W * 1.3f, SurfaceY, 0.05f - row * L * 1.2f);
-                return Stack(anchor, Quaternion.identity, index, count, faceUp, card, jitter: 2f);
-            }
+                return Stack(PileAnchor(zone.Index), Quaternion.identity, index, count, faceUp, card, jitter: 2f);
 
             case ZoneKind.Discard:
             {
-                var anchor = DiscardAnchor + new Vector3(-zone.Index * W * 1.6f, 0f, 0f);
+                var anchor = DiscardAnchorFor(zone.Index);
                 var pose = Stack(anchor, Quaternion.Euler(0f, -20f, 0f), index, count, faceUp, card, jitter: 22f);
                 pose.Position += Scatter(card) * 0.018f;
                 return pose;
@@ -99,6 +95,94 @@ public class TableLayout
             default:
                 return new CardPose(new Vector3(0f, SurfaceY, 0f), FaceDown);
         }
+    }
+
+    // ---- Anchors and drop targets ----
+
+    /// Table piles run in rows of six across the middle of the table.
+    public static Vector3 PileAnchor(int index)
+    {
+        int col = index % 6, row = index / 6;
+        return new Vector3((col - 2.5f) * W * 1.3f, SurfaceY, 0.05f - row * L * 1.2f);
+    }
+
+    public static Vector3 DiscardAnchorFor(int index) => DiscardAnchor + new Vector3(-index * W * 1.6f, 0f, 0f);
+
+    /// Places a dragged card can be dropped: the first row of table piles, the discard, and the
+    /// local player's own hand (dropped near where it is held).
+    public const float DropRadius = 0.16f;
+
+    public static bool TryDropZone(Vector3 point, out ZoneId zone, out Vector3 anchor)
+    {
+        var candidates = new (ZoneId zone, Vector3 anchor)[8];
+        for (int i = 0; i < 6; i++) candidates[i] = (ZoneId.Pile(i), PileAnchor(i));
+        candidates[6] = (ZoneId.Discard(), DiscardAnchorFor(0));
+        candidates[7] = (ZoneId.Hand(0), new Vector3(LocalHandPivot.x, SurfaceY, LocalHandPivot.z));
+
+        zone = default;
+        anchor = default;
+        float best = DropRadius * DropRadius;
+        foreach (var c in candidates)
+        {
+            var d = point - c.anchor;
+            d.y = 0f;
+            if (d.sqrMagnitude >= best) continue;
+            best = d.sqrMagnitude;
+            zone = c.zone;
+            anchor = c.anchor;
+        }
+        return best < DropRadius * DropRadius;
+    }
+
+    // ---- Inspecting a stack (e.g. choosing where to cut) ----
+
+    /// Upright frame for spreading a stack apart so each card can be seen and picked:
+    /// the zone's anchor and its yaw, with no tilt. Only the deck and held packets can be inspected.
+    public static bool TryInspectFrame(ZoneId zone, out Vector3 anchor, out Quaternion frame)
+    {
+        switch (zone.Kind)
+        {
+            case ZoneKind.Deck:
+                anchor = DeckAnchor;
+                frame  = Quaternion.Euler(0f, 6f, 0f);
+                return true;
+            case ZoneKind.Held:
+                bool left = zone.Index == 0;
+                anchor = left ? LeftHandAnchor : RightHandAnchor;
+                frame  = Quaternion.Euler(0f, left ? 14f : -14f, 0f);
+                return true;
+            default:
+                anchor = default;
+                frame  = Quaternion.identity;
+                return false;
+        }
+    }
+
+    /// Pose of a card in an inspected stack: cards <paramref name="spacing"/> apart (index 0 highest),
+    /// and slid <paramref name="slide"/> metres lengthwise out of the stack when selected.
+    public static CardPose InspectPose(CardTable table, int card, float spacing, float slide)
+    {
+        var zone = table.LocationOf(card);
+        TryInspectFrame(zone, out var anchor, out var frame);
+        int index = table.IndexOf(card), count = table.Count(zone);
+        float height = spacing * (count - 1 - index) + T * 0.5f;
+        var rot = frame * (table.IsFaceUp(card) ? Quaternion.identity : FaceDown);
+        return new CardPose(anchor + frame * new Vector3(0f, height, slide), rot);
+    }
+
+    /// The layer (zone index, 0 = top) of an inspected stack nearest to a ray, e.g. from the mouse.
+    /// Finds where the ray passes closest to the stack's vertical axis and converts that height to a card.
+    public static int LayerAt(Ray ray, Vector3 anchor, int count, float spacing)
+    {
+        if (count <= 0) return -1;
+        // Closest point between the ray and the vertical line through the anchor
+        Vector3 u = ray.direction, v = Vector3.up, w = ray.origin - anchor;
+        float a = Vector3.Dot(u, u), b = Vector3.Dot(u, v), c = Vector3.Dot(v, v);
+        float d = Vector3.Dot(u, w), e = Vector3.Dot(v, w);
+        float denom = a * c - b * b;
+        float t = denom > 1e-6f ? (a * e - b * d) / denom : e; // height along the axis
+        int fromBottom = Mathf.RoundToInt((t - T * 0.5f) / spacing);
+        return Mathf.Clamp(count - 1 - fromBottom, 0, count - 1);
     }
 
     /// A squared-up stack: index 0 (top of the zone) is highest.

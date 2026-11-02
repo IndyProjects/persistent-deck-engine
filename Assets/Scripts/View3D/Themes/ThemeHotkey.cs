@@ -1,13 +1,13 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-/// Development shortcut until there is a theme menu: press T to cycle through the available themes.
+/// Cycles through the available themes with the Theme key (T by default; Shift goes backwards).
 public class ThemeHotkey : MonoBehaviour
 {
     private void Update()
     {
         var kb = Keyboard.current;
-        if (kb == null || !kb.tKey.wasPressedThisFrame) return;
+        if (kb == null || ControlsPanel.AnyOpen || !Controls.Pressed(ControlAction.Theme)) return;
 
         ThemeService.Cycle(kb.shiftKey.isPressed ? -1 : 1);
         Debug.Log($"[Theme] {ThemeService.Current.DisplayName}");

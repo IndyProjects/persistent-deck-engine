@@ -7,7 +7,9 @@
         "PDE.Core",
         "PDE.GameState",
         "PDE.InputMapping",
-        "PDE.View3D"
+        "PDE.View3D",
+        "Unity.InputSystem",
+        "PDE.App"
     ],
     "includePlatforms": [
         "Editor"
