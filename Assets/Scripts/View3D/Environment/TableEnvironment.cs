@@ -3,8 +3,9 @@ using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 
 /// Builds the table environment from the active TableTheme and rebuilds it when the theme changes:
-/// a basic round table (or the theme's own environment prefab), optional floor, one key light,
-/// ambient light, optional fog and post-processing, and the seated camera.
+/// a plain room with a smooth round table, a chair at every seat and stick figures in the opponents'
+/// chairs (or the theme's own environment prefab), one key light, ambient light, optional fog and
+/// post-processing, and the seated camera.
 /// Everything it creates lives under one child object, so a rebuild never leaks or duplicates.
 public class TableEnvironment : MonoBehaviour
 {
@@ -12,6 +13,20 @@ public class TableEnvironment : MonoBehaviour
 
     public Camera     Camera { get; private set; }
     public TableTheme Theme  { get; private set; }
+
+    /// Whether the local player's figure is shown too. Off in play, where the camera is that figure.
+    public bool ShowLocalFigure
+    {
+        get => _showLocalFigure;
+        set
+        {
+            _showLocalFigure = value;
+            if (_localFigure != null) _localFigure.SetActive(value);
+        }
+    }
+
+    private bool       _showLocalFigure;
+    private GameObject _localFigure;
 
     private Transform _built;
     private readonly System.Collections.Generic.List<Object> _ownedAssets = new System.Collections.Generic.List<Object>();
@@ -39,7 +54,11 @@ public class TableEnvironment : MonoBehaviour
         if (theme.EnvironmentPrefab != null)
             Instantiate(theme.EnvironmentPrefab, _built);
         else
+        {
+            BuildRoom(theme.Table);
             BuildBasicTable(theme.Table);
+            BuildSeats(theme.Table);
+        }
 
         BuildLighting(theme.Lighting);
         if (theme.Lighting.PostProcessing) BuildPostProcessing();
@@ -48,27 +67,91 @@ public class TableEnvironment : MonoBehaviour
 
     // ---- Table ----
 
+    private const float RoomSize = 8f, RoomHeight = 3f;
+
+    private void BuildRoom(TableStyle style)
+    {
+        if (style.ShowFloor)
+        {
+            var floor = Own(Materials3D.Lit("Floor", style.FloorColor, smoothness: 0.15f));
+            Primitive(PrimitiveType.Plane, "Floor", Vector3.zero, new Vector3(RoomSize * 0.1f, 1f, RoomSize * 0.1f), floor);
+        }
+
+        var wall = Own(Materials3D.Lit("Walls", style.WallColor, smoothness: 0.05f));
+        for (int i = 0; i < 4; i++)
+        {
+            var outward = Quaternion.Euler(0f, i * 90f, 0f) * Vector3.forward;
+            var panel = Primitive(PrimitiveType.Quad, $"Wall {i}", outward * (RoomSize * 0.5f) + Vector3.up * (RoomHeight * 0.5f),
+                                  new Vector3(RoomSize, RoomHeight, 1f), wall);
+            panel.transform.rotation = Quaternion.LookRotation(outward);
+            LetLightThrough(panel);
+        }
+        var ceiling = Primitive(PrimitiveType.Quad, "Ceiling", Vector3.up * RoomHeight, new Vector3(RoomSize, RoomSize, 1f), wall);
+        ceiling.transform.rotation = Quaternion.Euler(-90f, 0f, 0f);
+        LetLightThrough(ceiling);
+    }
+
+    /// The key light comes from above and outside the room, so its shell mustn't shadow the table.
+    private static void LetLightThrough(GameObject surface)
+        => surface.GetComponent<MeshRenderer>().shadowCastingMode = ShadowCastingMode.Off;
+
     private void BuildBasicTable(TableStyle style)
     {
         float r = TableLayout.TableRadius, top = TableLayout.SurfaceY;
 
-        var felt = Own(Materials3D.Lit("Felt", style.FeltColor, style.FeltTexture, smoothness: 0.05f));
-        var edge = Own(Materials3D.Lit("Table Edge", style.EdgeColor, smoothness: 0.45f));
+        var feltMat = Own(Materials3D.Lit("Felt", style.FeltColor, style.FeltTexture, smoothness: 0.05f));
+        var wood    = Own(Materials3D.Lit("Table Wood", style.EdgeColor, smoothness: 0.45f));
 
-        var surface = Primitive(PrimitiveType.Cylinder, "Felt", new Vector3(0f, top - 0.015f, 0f), new Vector3(r * 2f, 0.015f, r * 2f), felt);
+        var surface = Turned("Felt", feltMat, new Vector2(0f, top), new Vector2(r, top));
         // Accurate round collider for pointing at the table
         surface.AddComponent<MeshCollider>().sharedMesh = surface.GetComponent<MeshFilter>().sharedMesh;
 
-        // Edge top sits 5 mm below the felt so the two faces never coincide (z-fighting)
-        Primitive(PrimitiveType.Cylinder, "Edge",     new Vector3(0f, top - 0.035f, 0f), new Vector3(r * 2f + 0.08f, 0.03f, r * 2f + 0.08f), edge);
-        Primitive(PrimitiveType.Cylinder, "Pedestal", new Vector3(0f, (top - 0.06f) * 0.5f, 0f), new Vector3(0.16f, (top - 0.06f) * 0.5f, 0.16f), edge);
-        Primitive(PrimitiveType.Cylinder, "Foot",     new Vector3(0f, 0.02f, 0f), new Vector3(0.8f, 0.02f, 0.8f), edge);
+        // A padded rail standing just proud of the felt, then the underside
+        Turned("Rail", wood,
+            new Vector2(r - 0.002f, top - 0.01f), new Vector2(r - 0.002f, top + 0.008f), new Vector2(r + 0.02f, top + 0.022f),
+            new Vector2(r + 0.05f, top + 0.024f), new Vector2(r + 0.075f, top + 0.012f), new Vector2(r + 0.08f, top - 0.012f),
+            new Vector2(r + 0.07f, top - 0.04f), new Vector2(r + 0.04f, top - 0.05f), new Vector2(r - 0.05f, top - 0.05f),
+            new Vector2(r - 0.05f, top - 0.1f), new Vector2(0f, top - 0.1f));
 
-        if (style.ShowFloor)
+        float legTop = top - 0.1f;
+        for (int i = 0; i < 4; i++)
         {
-            var floor = Own(Materials3D.Lit("Floor", style.FloorColor, smoothness: 0.1f));
-            Primitive(PrimitiveType.Plane, "Floor", Vector3.zero, new Vector3(2f, 1f, 2f), floor, keepCollider: true);
+            // Legs sit between the seats, clear of everyone's knees
+            var at = Quaternion.Euler(0f, 45f + i * 90f, 0f) * Vector3.forward * (r * 0.68f);
+            Primitive(PrimitiveType.Cylinder, $"Leg {i}", at + Vector3.up * (legTop * 0.5f), new Vector3(0.09f, legTop * 0.5f, 0.09f), wood);
         }
+    }
+
+    private void BuildSeats(TableStyle style)
+    {
+        var chairMat  = Own(Materials3D.Lit("Chair", style.ChairColor, smoothness: 0.3f));
+        var figureMat = Own(Materials3D.Lit("Stick Figure", style.FigureColor, smoothness: 0.2f));
+        var layout = new TableLayout();
+
+        for (int seat = 0; seat < TableLayout.DefaultSeats; seat++)
+        {
+            var chair = new GameObject($"Seat {seat}").transform;
+            chair.SetParent(_built, false);
+            chair.SetPositionAndRotation(layout.SeatDirection(seat) * (TableLayout.TableRadius + 0.42f), layout.SeatFacing(seat));
+            SeatedFigure.BuildChair(chair, chairMat);
+
+            var figure = SeatedFigure.Build(chair, figureMat);
+            if (seat != 0) continue;
+            _localFigure = figure;
+            figure.SetActive(_showLocalFigure); // in play the camera is this figure's eyes
+        }
+    }
+
+    private GameObject Turned(string name, Material material, params Vector2[] profile)
+    {
+        var go = new GameObject(name, typeof(MeshFilter), typeof(MeshRenderer));
+        go.transform.SetParent(_built, false);
+        go.GetComponent<MeshFilter>().sharedMesh = Own(MeshShapes.Lathe(name, profile));
+        var renderer = go.GetComponent<MeshRenderer>();
+        renderer.sharedMaterial = material;
+        // These surfaces are open shells: both sides must cast, or light leaks through the shadow
+        renderer.shadowCastingMode = ShadowCastingMode.TwoSided;
+        return go;
     }
 
     // ---- Lighting ----
@@ -169,7 +252,7 @@ public class TableEnvironment : MonoBehaviour
         return asset;
     }
 
-    private GameObject Primitive(PrimitiveType type, string name, Vector3 position, Vector3 scale, Material material, bool keepCollider = false)
+    private GameObject Primitive(PrimitiveType type, string name, Vector3 position, Vector3 scale, Material material)
     {
         var go = GameObject.CreatePrimitive(type);
         go.name = name;
@@ -177,7 +260,7 @@ public class TableEnvironment : MonoBehaviour
         go.transform.localPosition = position;
         go.transform.localScale    = scale;
         go.GetComponent<MeshRenderer>().sharedMaterial = material;
-        if (!keepCollider) DestroySafe(go.GetComponent<Collider>());
+        DestroySafe(go.GetComponent<Collider>());
         return go;
     }
 

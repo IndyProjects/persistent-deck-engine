@@ -10,7 +10,7 @@ using UnityEngine.SceneManagement;
 ///
 /// Menu: Tools → Persistent Deck → Capture Table Preview (writes Logs/TablePreview_seat.png).
 /// Batch: Unity -batchmode -projectPath . -executeMethod TablePreviewCapture.CaptureBatch
-///        -captureOut out.png [-captureScenario showcase|fresh|shuffle|held|dealing|blackjack] [-captureViews seat,top,side,cut]
+///        -captureOut out.png [-captureScenario showcase|fresh|shuffle|held|dealing|blackjack] [-captureViews seat,top,side,cut,cutmove,riffle,riffledone]
 ///        [-captureTheme classic|midnight|…]
 public static class TablePreviewCapture
 {
@@ -126,7 +126,9 @@ public static class TablePreviewCapture
             for (int i = 0; i < views.Length; i++)
             {
                 if (views[i].Trim() == "cut") PreviewCut(sm, cards, cam);
-                else if (views[i].Trim() == "riffle") PreviewRiffle(sm, cards, cam);
+                else if (views[i].Trim() == "riffle") PreviewRiffle(sm, cards, cam, 20);
+                else if (views[i].Trim() == "riffledone") PreviewRiffle(sm, cards, cam, 52);
+                else if (views[i].Trim() == "cutmove") PreviewCutMotion(sm, cards, cam);
                 else PlaceCamera(cam, views[i].Trim());
                 written[i] = Path.ChangeExtension(path, null) + $"_{theme.Id}_{views[i].Trim()}.png";
                 Render(cam, written[i]);
@@ -202,15 +204,29 @@ public static class TablePreviewCapture
     }
 
     /// The hands-on riffle mid-way: split 26/26, twenty cards dropped alternately onto the table.
-    private static void PreviewRiffle(GameStateManager sm, TableCardView cards, Camera cam)
+    private static void PreviewRiffle(GameStateManager sm, TableCardView cards, Camera cam, int drops)
     {
         var riffle = cards.GetComponent<RiffleInteraction>();
         if (riffle == null) riffle = cards.gameObject.AddComponent<RiffleInteraction>(); // not ??: Unity fake-null
         var rig = cam.GetComponent<SeatedCameraRig>();
         if (!riffle.Begin(sm, cards, rig))
             throw new InvalidOperationException($"Riffle preview needs the deck in hand: {riffle.LastMessage}");
-        riffle.PreviewDrops(26, 20);
+        riffle.PreviewDrops(26, drops);
         cards.SnapAll();
+        rig.ApplyImmediate();
+    }
+
+    /// The cut partway through: the lower section lifted clear, passing back over the top of the deck.
+    private static void PreviewCutMotion(GameStateManager sm, TableCardView cards, Camera cam)
+    {
+        var cut = cards.GetComponent<CutInteraction>();
+        if (cut == null) cut = cards.gameObject.AddComponent<CutInteraction>(); // not ??: Unity fake-null
+        var rig = cam.GetComponent<SeatedCameraRig>();
+        if (!cut.Begin(sm, cards, rig))
+            throw new InvalidOperationException($"Cut preview needs the deck: {cut.LastMessage}");
+        cards.SnapAll();
+        cut.StartCut(26, 26);
+        cards.AnimateTo(Time.time + 0.28f + 0.28f + 0.2f + 0.24f + 0.08f); // moving across, section above the rest
         rig.ApplyImmediate();
     }
 

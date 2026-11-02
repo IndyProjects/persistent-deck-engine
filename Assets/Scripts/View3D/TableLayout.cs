@@ -158,6 +158,11 @@ public class TableLayout
         }
     }
 
+    /// A card in a packet at <paramref name="height"/> above the anchor, slid <paramref name="slide"/> lengthwise.
+    public static CardPose PacketPose(Vector3 anchor, Quaternion frame, float height, float slide, bool faceUp)
+        => new CardPose(anchor + frame * new Vector3(0f, height + T * 0.5f, slide),
+                        frame * (faceUp ? Quaternion.identity : FaceDown));
+
     /// Pose of a card in an inspected stack: cards <paramref name="spacing"/> apart (index 0 highest),
     /// and slid <paramref name="slide"/> metres lengthwise out of the stack when selected.
     public static CardPose InspectPose(CardTable table, int card, float spacing, float slide)

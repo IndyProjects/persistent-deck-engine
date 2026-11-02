@@ -31,6 +31,9 @@ public static class BuiltInThemes
         t.Table.FeltColor  = new Color(0.07f, 0.13f, 0.30f);
         t.Table.EdgeColor  = new Color(0.08f, 0.08f, 0.09f);
         t.Table.FloorColor = new Color(0.06f, 0.06f, 0.08f);
+        t.Table.WallColor  = new Color(0.09f, 0.10f, 0.15f);
+        t.Table.ChairColor = new Color(0.12f, 0.12f, 0.15f);
+        t.Table.FigureColor = new Color(0.48f, 0.53f, 0.63f);
         t.Table.Background = new Color(0.02f, 0.025f, 0.04f);
 
         t.Lighting.KeyLight       = KeyLightKind.OverheadSpot;

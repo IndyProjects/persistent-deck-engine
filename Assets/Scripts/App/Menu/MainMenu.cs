@@ -69,6 +69,7 @@ public class MainMenu : MonoBehaviour
     {
         var env = new GameObject("Table Environment").AddComponent<TableEnvironment>();
         if (env.Theme == null) env.Build(_camera, ThemeService.Current); // play mode builds in Awake
+        env.ShowLocalFigure = true; // from out here, every seat is someone else's
         _camera = env.Camera;
 
         // The menu flies the camera itself

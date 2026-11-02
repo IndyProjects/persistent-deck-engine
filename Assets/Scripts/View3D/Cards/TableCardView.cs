@@ -3,6 +3,17 @@ using System.Collections.Generic;
 using UnityEngine;
 using Object = UnityEngine.Object;
 
+/// Replaces where cards sit while a presentation runs (e.g. two packets woven together in a riffle),
+/// without changing anything about the game.
+public interface ICardPoser
+{
+    /// Called after each shown move, with the table as it now stands.
+    void OnMove(CardMove move, CardTable table);
+
+    /// Returns true with a pose for cards this presentation places; false leaves them to the layout.
+    bool TryPose(CardTable table, int card, out CardPose pose);
+}
+
 /// Identifies a card GameObject (for raycasts / interaction).
 public class CardObject : MonoBehaviour
 {
@@ -232,6 +243,7 @@ public class TableCardView : MonoBehaviour, IStateManagerConsumer
     private void ShowMove(CardMove move, float start)
     {
         var resolved = _shown.Apply(move);
+        Poser?.OnMove(resolved, _shown);
         var moved = new HashSet<int>();
         var dest = _shown.Cards(resolved.To);
         for (int i = resolved.ToIndex; i < resolved.ToIndex + resolved.Count; i++) moved.Add(dest[i]);
@@ -291,7 +303,43 @@ public class TableCardView : MonoBehaviour, IStateManagerConsumer
         }
         // Also used when a commit was rejected: forget it and show the game as it really is
         _previewing = _previewCommitted = false;
+        ClearPresentation();
         Resync(gather: false);
+    }
+
+    /// Applies a move to the shown table with no animation; the caller scripts the motion itself.
+    public void ApplySilently(CardMove move)
+    {
+        if (!_previewing) throw new InvalidOperationException("BeginPreview first.");
+        _shown.Apply(move);
+    }
+
+    // ---- Presentation: custom poses and scripted motion ----
+
+    /// While set, decides where the cards it recognises sit.
+    public ICardPoser Poser { get; set; }
+
+    /// Multiply how high and how long moved cards travel (1 = normal).
+    public float ArcScale { get; set; } = 1f;
+    public float TravelScale { get; set; } = 1f;
+
+    /// Back to ordinary poses and travel.
+    public void ClearPresentation()
+    {
+        Poser = null;
+        ArcScale = TravelScale = 1f;
+    }
+
+    /// Moves every card in a zone to where it now belongs (after a presentation or scripted motion).
+    public void Settle(ZoneId zone) => RetargetZone(zone, Time.time, NoneMoved);
+
+    /// Queues one step of a scripted motion for a card.
+    public void ScheduleCard(int card, float start, CardPose to, float duration, float arc = 0f)
+    {
+        start = Mathf.Max(start, _queueEnd[card]);
+        _queues[card].Enqueue(new Segment { Start = start, Duration = duration, Arc = arc, To = to });
+        _queueEnd[card] = start + duration;
+        _target[card]   = to;
     }
 
     // ---- Replay: re-enact logged moves from a past state ----
@@ -302,8 +350,8 @@ public class TableCardView : MonoBehaviour, IStateManagerConsumer
     public bool IsReplaying => _replaying;
 
     /// Shows the table as it was in <paramref name="before"/>, plays <paramref name="moves"/> slowly, then
-    /// returns to the present. Ignored while previewing.
-    public void PlayReplay(CardTable before, IReadOnlyList<CardMove> moves)
+    /// returns to the present. Ignored while previewing. A riffle replays woven together like the real one.
+    public void PlayReplay(CardTable before, IReadOnlyList<CardMove> moves, bool isRiffle = false)
     {
         if (_previewing || _sm == null) return;
         _replaying = true;
@@ -320,8 +368,23 @@ public class TableCardView : MonoBehaviour, IStateManagerConsumer
 
         float start = now + _travelTime + 0.35f;
         float step = Mathf.Clamp(_maxReplayDuration / Mathf.Max(1, moves.Count), 0.05f, 0.3f);
+        var riffle = isRiffle ? new RifflePresentation() : null;
+        Poser = riffle;
         for (int k = 0; k < moves.Count; k++)
-            ShowMove(moves[k], start + k * step);
+        {
+            float at = start + k * step;
+            if (riffle != null && moves[k].From == ZoneId.Deck && moves[k].To.Kind == ZoneKind.Held)
+            {
+                // The deck lifting back up: push the woven halves together first
+                riffle.Pushed = true;
+                RetargetZone(ZoneId.Deck, at, NoneMoved);
+                start += RifflePresentation.PushSeconds;
+                at += RifflePresentation.PushSeconds;
+                Poser = null;
+            }
+            ShowMove(moves[k], at);
+        }
+        Poser = null;
 
         _replayEnds = start + moves.Count * step + _travelTime + 0.6f;
     }
@@ -330,6 +393,7 @@ public class TableCardView : MonoBehaviour, IStateManagerConsumer
     {
         if (!_replaying) return;
         _replaying = false;
+        ClearPresentation();
         Resync(gather: false);
     }
 
@@ -430,6 +494,15 @@ public class TableCardView : MonoBehaviour, IStateManagerConsumer
 
     public void ClearSelection() => Select(-1, 0);
 
+    /// Stops inspecting without moving any cards (a scripted motion takes over from here).
+    public void EndInspectQuietly()
+    {
+        ClearTints(SelectedTint);
+        _selStart = -1;
+        _selCount = 0;
+        _inspected = null;
+    }
+
     /// Squares the stack back up.
     public void EndInspect()
     {
@@ -457,6 +530,8 @@ public class TableCardView : MonoBehaviour, IStateManagerConsumer
     /// Where a card belongs right now: its layout pose, or its spread pose while its stack is inspected.
     private CardPose PoseOf(int card)
     {
+        if (Poser != null && Poser.TryPose(_shown, card, out var presented))
+            return presented;
         if (!_inspected.HasValue || _shown.LocationOf(card) != _inspected.Value)
             return Layout.Pose(_shown, card);
 
@@ -471,14 +546,14 @@ public class TableCardView : MonoBehaviour, IStateManagerConsumer
         {
             var pose = PoseOf(card);
             if (pose.Approximately(_target[card])) continue;
-            Schedule(card, start, pose, moved.Contains(card) ? _arcHeight : 0f);
+            Schedule(card, start, pose, moved.Contains(card) ? _arcHeight * ArcScale : 0f);
         }
     }
 
     private void Schedule(int card, float start, CardPose to, float arc)
     {
         start = Mathf.Max(start, _queueEnd[card]);
-        float duration = arc > 0f ? _travelTime : _travelTime * 0.6f;
+        float duration = (arc > 0f ? _travelTime : _travelTime * 0.6f) * TravelScale;
         _queues[card].Enqueue(new Segment { Start = start, Duration = duration, Arc = arc, To = to });
         _queueEnd[card] = start + duration;
         _target[card]   = to;
@@ -489,9 +564,14 @@ public class TableCardView : MonoBehaviour, IStateManagerConsumer
     private void Update()
     {
         if (_cards[0] == null) return;
-        float now = Time.time;
+        if (_replaying && Time.time >= _replayEnds) EndReplay();
+        AnimateTo(Time.time);
+    }
 
-        if (_replaying && now >= _replayEnds) EndReplay();
+    /// Advances every card's motion to <paramref name="now"/>. Update calls this each frame; previews
+    /// outside play mode can call it to see a moment partway through a motion.
+    public void AnimateTo(float now)
+    {
 
         for (int c = 0; c < DeckEngine.DeckSize; c++)
         {

@@ -16,7 +16,7 @@ public class TableTheme : ScriptableObject
     public TableStyle    Table    = new TableStyle();
     public LightingStyle Lighting = new LightingStyle();
 
-    [Tooltip("Optional prefab that replaces the built-in table and floor. Its playing surface must sit at " +
+    [Tooltip("Optional prefab that replaces the built-in room, table, chairs and figures. Its playing surface must sit at " +
              "TableLayout.SurfaceY (0.76 m) with radius TableLayout.TableRadius, centred on the origin.")]
     public GameObject EnvironmentPrefab;
 }
@@ -46,12 +46,18 @@ public class CardStyle
 [Serializable]
 public class TableStyle
 {
-    public Color FeltColor = new Color(0.08f, 0.30f, 0.17f);
+    public Color FeltColor = new Color(0.11f, 0.33f, 0.27f);
     [Tooltip("Optional felt texture (tinted by FeltColor).")]
     public Texture2D FeltTexture;
-    public Color EdgeColor  = new Color(0.25f, 0.14f, 0.08f);
+    [Tooltip("The table's rail, underside and legs.")]
+    public Color EdgeColor  = new Color(0.36f, 0.21f, 0.11f);
     public bool  ShowFloor  = true;
-    public Color FloorColor = new Color(0.18f, 0.17f, 0.17f);
+    public Color FloorColor = new Color(0.27f, 0.20f, 0.15f);
+    [Tooltip("The room's walls and ceiling.")]
+    public Color WallColor  = new Color(0.46f, 0.43f, 0.37f);
+    public Color ChairColor  = new Color(0.30f, 0.18f, 0.10f);
+    [Tooltip("The temporary stick figures.")]
+    public Color FigureColor = new Color(0.84f, 0.82f, 0.77f);
     [Tooltip("Camera clear colour behind everything.")]
     public Color Background = new Color(0.10f, 0.10f, 0.11f);
 }

@@ -102,7 +102,13 @@ public class ThemeTests
         Assert.AreEqual(1, env.transform.childCount);
         var felt = env.transform.GetChild(0).Find("Felt");
         Assert.IsNotNull(felt, "basic table built");
-        Assert.AreEqual(TableLayout.SurfaceY, felt.position.y + felt.localScale.y, 1e-4f, "felt top at the card surface");
+        Assert.AreEqual(TableLayout.SurfaceY, felt.GetComponent<MeshFilter>().sharedMesh.bounds.max.y, 1e-4f, "felt top at the card surface");
+        for (int seat = 0; seat < TableLayout.DefaultSeats; seat++)
+            Assert.IsNotNull(env.transform.GetChild(0).Find($"Seat {seat}/Stick Figure"), $"seat {seat} has a chair and a figure");
+        Assert.IsFalse(env.transform.GetChild(0).Find("Seat 0/Stick Figure").gameObject.activeSelf, "the camera is seat 0's eyes");
+        Assert.IsTrue(env.transform.GetChild(0).Find("Seat 1/Stick Figure").gameObject.activeSelf);
+        env.ShowLocalFigure = true;
+        Assert.IsTrue(env.transform.GetChild(0).Find("Seat 0/Stick Figure").gameObject.activeSelf);
 
         var midnight = BuiltInThemes.Midnight();
         env.Build(cam, midnight);

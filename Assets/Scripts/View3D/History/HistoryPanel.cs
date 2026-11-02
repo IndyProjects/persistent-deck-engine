@@ -96,7 +96,8 @@ public class HistoryPanel : MonoBehaviour, IStateManagerConsumer
         var history = _sm.History;
         int index = history.LastShuffleIndex();
         if (index < 0 || _view == null) return;
-        _view.PlayReplay(history.StateBefore(index), history.Entries[index].Moves);
+        var entry = history.Entries[index];
+        _view.PlayReplay(history.StateBefore(index), entry.Moves, entry.Kind == ActionKind.Riffle);
     }
 
     // ---- Content ----

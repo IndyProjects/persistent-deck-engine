@@ -124,6 +124,14 @@ public abstract class TableInteraction : MonoBehaviour, IStateManagerConsumer
         Rig.Focus(hands + new Vector3(-0.05f, 0.32f, -0.36f), target);
     }
 
+    /// Close, front-on view across the riffle spot: low enough to see the two halves zip together, with
+    /// the packets still in hand above and behind them.
+    protected void FocusOnRiffle()
+    {
+        var spot = RifflePresentation.Spot;
+        Rig.Focus(spot + new Vector3(0f, 0.15f, -0.3f), spot + new Vector3(0f, 0.045f, 0.02f));
+    }
+
     /// Side-on close-up of a spread stack, from above the top card so only backs are seen.
     protected void FocusOnSpread(Vector3 anchor, Quaternion frame, int count, float spacing, float distance)
     {
